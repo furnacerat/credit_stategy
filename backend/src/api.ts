@@ -40,14 +40,7 @@ function safeFilename(name: string) {
 }
 
 // One-time: ensure tables exist (simple for MVP)
-app.get("/health", async (_req, res) => {
-  try {
-    await pool.query("select 1");
-    res.json({ ok: true });
-  } catch (e: unknown) {
-    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
-  }
-});
+app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.post("/admin/migrate", async (_req, res) => {
   try {
