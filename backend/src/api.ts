@@ -1,23 +1,29 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { z } from "zod";
+import crypto from "crypto";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pool } from "./db.js";
 import { SQL } from "./schema.js";
-
-dotenv.config();
+import { r2, R2_BUCKET } from "./r2.js";
 
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? ["http://localhost:3000"] }));
 app.use(express.json({ limit: "2mb" }));
+
+function safeFilename(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+}
 
 // One-time: ensure tables exist (simple for MVP)
 app.get("/health", async (_req, res) => {
   try {
     await pool.query("select 1");
     res.json({ ok: true });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "db_error" });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
   }
 });
 
@@ -26,8 +32,8 @@ app.post("/admin/migrate", async (_req, res) => {
     await pool.query("create extension if not exists pgcrypto;");
     await pool.query(SQL);
     res.json({ ok: true });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "migrate_error" });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "migrate_error" });
   }
 });
 
@@ -35,6 +41,72 @@ app.post("/admin/migrate", async (_req, res) => {
 function getUserId(req: express.Request) {
   return req.header("x-user-id") || "demo_user";
 }
+
+app.post("/uploads/presign", async (req, res) => {
+  const bodySchema = z.object({
+    filename: z.string().min(1),
+    contentType: z.string().default("application/pdf"),
+  });
+
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+
+  const userId = getUserId(req);
+  const filename = safeFilename(parsed.data.filename);
+  const contentType = parsed.data.contentType || "application/pdf";
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const rand = crypto.randomBytes(6).toString("hex");
+  const fileKey = `${userId}/${stamp}_${rand}_${filename}`;
+
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: fileKey,
+    ContentType: contentType,
+  });
+
+  try {
+    const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 600 });
+
+    res.json({
+      ok: true,
+      file_key: fileKey,
+      upload_url: uploadUrl,
+      expires_in: 600,
+    });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "r2_error" });
+  }
+});
+
+app.post("/downloads/presign", async (req, res) => {
+  const bodySchema = z.object({
+    file_key: z.string().min(1),
+  });
+
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+
+  const userId = getUserId(req);
+  const fileKey = parsed.data.file_key;
+
+  // basic safety: user can only download their own files
+  if (!fileKey.startsWith(`${userId}/`)) {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: fileKey,
+  });
+
+  try {
+    const downloadUrl = await getSignedUrl(r2, command, { expiresIn: 600 });
+    res.json({ ok: true, download_url: downloadUrl, expires_in: 600 });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "r2_error" });
+  }
+});
 
 app.post("/reports", async (req, res) => {
   const bodySchema = z.object({
@@ -63,8 +135,8 @@ app.post("/reports", async (req, res) => {
     );
 
     res.json({ ok: true, report: report.rows[0], job: job.rows[0] });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "db_error" });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
   }
 });
 
@@ -81,8 +153,8 @@ app.get("/jobs/:id", async (req, res) => {
 
     if (!job.rowCount) return res.status(404).json({ ok: false, error: "not_found" });
     res.json({ ok: true, job: job.rows[0] });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "db_error" });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
   }
 });
 
@@ -96,8 +168,8 @@ app.get("/reports/:reportId/result", async (req, res) => {
     );
     if (!r.rowCount) return res.status(404).json({ ok: false, error: "no_result" });
     res.json({ ok: true, result: r.rows[0] });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? "db_error" });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
   }
 });
 

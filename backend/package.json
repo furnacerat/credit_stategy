@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev:api": "nodemon --watch src --exec ts-node src/api.ts",
-    "dev:worker": "nodemon --watch src --exec ts-node src/worker.ts",
+    "dev:api": "nodemon --watch src --exec node --loader ts-node/esm src/api.ts",
+    "dev:worker": "nodemon --watch src --exec node --loader ts-node/esm src/worker.ts",
     "start:api": "node dist/api.js",
     "start:worker": "node dist/worker.js",
     "build": "tsc -p tsconfig.json"
@@ -15,9 +15,14 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.994.0",
+    "@aws-sdk/s3-request-presigner": "^3.994.0",
+    "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "openai": "^6.22.0",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.18.0",
     "zod": "^4.3.6"
   },
@@ -25,6 +30,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.0",
+    "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.16.0",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
