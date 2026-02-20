@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
+import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import crypto from "crypto";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
@@ -12,27 +12,27 @@ import { r2, R2_BUCKET } from "./r2.js";
 const app = express();
 const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
   .split(",")
-  .map((s) => s.trim())
+  .map(s => s.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow same-origin / server-to-server / curl (no origin)
-      if (!origin) return callback(null, true);
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin as string | undefined;
 
-      // exact match allowlist
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,x-user-id");
+  }
 
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
-  })
-);
+  // Handle preflight
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
 
-// Handle preflight for all routes
-app.options("*", cors());
+  next();
+});
 app.use(express.json({ limit: "2mb" }));
 
 function safeFilename(name: string) {
