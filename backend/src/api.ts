@@ -12,25 +12,34 @@ import { r2, R2_BUCKET } from "./r2.js";
 const app = express();
 
 // ---------- CORS (must be BEFORE routes) ----------
-const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000,https://creditstrategyai.com,https://www.creditstrategyai.com")
+const envOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
 
+const allowedOrigins = [...new Set([
+  ...envOrigins,
+  "https://creditstrategyai.com",
+  "https://www.creditstrategyai.com"
+])];
+
 app.use((req, res, next) => {
   const origin = req.headers.origin as string | undefined;
 
-  if (origin && allowedOrigins.includes(origin)) {
+  // Debug log for every request with an origin (mostly CORS related)
+  if (origin || req.method === "OPTIONS") {
+    console.log(`[CORS] ${req.method} from origin: ${origin}`);
+  }
+
+  if (origin && (allowedOrigins.includes(origin) || origin.endsWith(".creditstrategyai.com"))) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,x-user-id");
-  } else if (origin) {
-    console.log(`CORS Blocked: Origin "${origin}" not in [${allowedOrigins.join(", ")}]`);
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-user-id, Accept, Origin");
+    res.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
   }
 
-  // IMPORTANT: respond to preflight for ALL routes
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
