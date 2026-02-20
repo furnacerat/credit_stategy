@@ -10,12 +10,14 @@ import { SQL } from "./schema.js";
 import { r2, R2_BUCKET } from "./r2.js";
 
 const app = express();
-const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
+
+// ---------- CORS (must be BEFORE routes) ----------
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000,https://creditstrategyai.com,https://www.creditstrategyai.com")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
 
-app.use((req: Request, res: Response, next: NextFunction) => {
+app.use((req, res, next) => {
   const origin = req.headers.origin as string | undefined;
 
   if (origin && allowedOrigins.includes(origin)) {
@@ -24,11 +26,17 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,x-user-id");
+  } else if (origin) {
+    console.log(`CORS Blocked: Origin "${origin}" not in [${allowedOrigins.join(", ")}]`);
+  }
+
+  // IMPORTANT: respond to preflight for ALL routes
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
   }
 
   next();
 });
-app.options("*", (_req, res) => res.sendStatus(204));
 app.use(express.json({ limit: "2mb" }));
 
 function safeFilename(name: string) {
@@ -54,6 +62,7 @@ function getUserId(req: express.Request) {
 }
 
 app.post("/uploads/presign", async (req, res) => {
+  console.log("PRESIGN HIT", new Date().toISOString());
   const bodySchema = z.object({
     filename: z.string().min(1),
     contentType: z.string().default("application/pdf"),
