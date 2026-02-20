@@ -7,6 +7,8 @@ import { analyzeCreditText } from "./analyzeCreditText.js";
 async function sleep(ms) {
     await new Promise((r) => setTimeout(r, ms));
 }
+// S3 Body can be a variety of stream types depending on the environment
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function streamToBuffer(stream) {
     const chunks = [];
     for await (const chunk of stream)
@@ -63,10 +65,11 @@ async function runOnce() {
         await pool.query(`update jobs set status='complete', progress='Complete', updated_at=now() where id=$1`, [job.id]);
     }
     catch (e) {
-        console.error(`[WORKER] job ${job.id} failed:`, e.message);
+        const msg = e?.message ?? "worker_error";
+        console.error(`[WORKER] job ${job.id} failed:`, msg);
         await pool.query(`update jobs set status='failed', progress='Error', error=$2, updated_at=now() where id=$1`, [
             job.id,
-            e.message,
+            msg,
         ]);
     }
 }

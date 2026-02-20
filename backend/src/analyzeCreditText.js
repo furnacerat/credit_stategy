@@ -99,6 +99,7 @@ export async function analyzeCreditText(rawText) {
     ];
     // Using the user-preferred openai.responses API
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = await openai.responses.create({
         model,
         input,

@@ -1,4 +1,4 @@
 import { Pool } from 'pg';
 export declare const pool: Pool;
-export declare const query: (text: string, params?: unknown[]) => Promise<import("pg").QueryResult<unknown>>;
+export declare const query: (text: string, params?: unknown[]) => Promise<import("pg").QueryResult<any>>;
 //# sourceMappingURL=db.d.ts.map
