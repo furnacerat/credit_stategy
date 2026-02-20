@@ -9,7 +9,25 @@ import { pool } from "./db.js";
 import { SQL } from "./schema.js";
 import { r2, R2_BUCKET } from "./r2.js";
 const app = express();
-app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? ["http://localhost:3000"] }));
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+app.use(cors({
+    origin: (origin, callback) => {
+        // allow same-origin / server-to-server / curl (no origin)
+        if (!origin)
+            return callback(null, true);
+        // exact match allowlist
+        if (allowedOrigins.includes(origin))
+            return callback(null, true);
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
+}));
+// Handle preflight for all routes
+app.options("*", cors());
 app.use(express.json({ limit: "2mb" }));
 function safeFilename(name) {
     return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
