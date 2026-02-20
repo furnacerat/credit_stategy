@@ -6,6 +6,7 @@
   "scripts": {
     "dev:api": "nodemon --watch src --exec node --loader ts-node/esm src/api.ts",
     "dev:worker": "nodemon --watch src --exec node --loader ts-node/esm src/worker.ts",
+    "start": "npm run start:api",
     "start:api": "node dist/api.js",
     "start:worker": "node dist/worker.js",
     "build": "tsc -p tsconfig.json"
