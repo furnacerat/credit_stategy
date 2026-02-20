@@ -11,6 +11,11 @@ import { r2, R2_BUCKET } from "./r2.js";
 
 const app = express();
 
+app.use((req, res, next) => {
+  res.setHeader("X-CORS-MW", "ON");
+  next();
+});
+
 // ---------- CORS (MUST be before any routes) ----------
 const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
   .split(",")
