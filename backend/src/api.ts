@@ -26,13 +26,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,x-user-id");
   }
 
-  // Handle preflight
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
   next();
 });
+app.options("*", (_req, res) => res.sendStatus(204));
 app.use(express.json({ limit: "2mb" }));
 
 function safeFilename(name: string) {
