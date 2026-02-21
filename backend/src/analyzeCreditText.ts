@@ -10,6 +10,9 @@ export type CreditAnalysis = {
             impact: string; // e.g. "19 instances" or "38%"
         }>;
         projected_score_range: string; // e.g. "620–660"
+        provider?: string; // e.g. "Experian"
+        report_date?: string; // e.g. "Feb 2, 2026"
+        completeness_percentage: number; // 0-100
     };
     impact_ranking: Array<{
         issue: string;
@@ -91,9 +94,12 @@ const schema = {
                         required: ["label", "impact"]
                     }
                 },
-                projected_score_range: { type: "string" }
+                projected_score_range: { type: "string" },
+                provider: { type: "string" },
+                report_date: { type: "string" },
+                completeness_percentage: { type: "integer" }
             },
-            required: ["score", "rating", "primary_issues", "top_score_killers", "projected_score_range"]
+            required: ["score", "rating", "primary_issues", "top_score_killers", "projected_score_range", "completeness_percentage"]
         },
         impact_ranking: {
             type: "array",
@@ -234,6 +240,9 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
                 - 'primary_issues': 3-4 bullet points.
                 - 'top_score_killers': Rank the 3 most statistically damaging factors including counts/details (e.g., 'Late Payments' with '19 instances').
                 - 'projected_score_range': Estimate a score range (e.g. '620-660') if all major issues are resolved.
+                - 'provider': Identify the bureau (Experian, Equifax, TransUnion, or Generic).
+                - 'report_date': The date the report was generated.
+                - 'completeness_percentage': A score from 0-100 based on how much data was successfully parsed (e.g., if utilization, inquiries, and negatives are all present and detailed, score is high).
                 
                 Categorize the 'impact_ranking' issues by 'severity' (CRITICAL, HIGH, MEDIUM).
                 For each, provide 1-2 'details' bullets (e.g., 'Affects 35% of score', 'Last late: Dec 2025').

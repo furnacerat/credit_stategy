@@ -241,6 +241,9 @@ export default function AppDashboard() {
 
     const score = result?.summary?.score ?? result?.score_estimate ?? null;
     const rating = result?.summary?.rating ?? null;
+    const provider = result?.summary?.provider ?? null;
+    const reportDate = result?.summary?.report_date ?? null;
+    const completeness = result?.summary?.completeness_percentage ?? null;
     const primaryIssues = result?.summary?.primary_issues ?? [];
     const scoreKillers = result?.summary?.top_score_killers ?? [];
     const impactRanking = result?.impact_ranking ?? [];
@@ -433,11 +436,30 @@ export default function AppDashboard() {
                         </div>
                         <div>
                             <div className="font-semibold leading-tight">Credit Strategy AI</div>
-                            <div className="text-xs text-white/60">Widget Dashboard</div>
+                            <div className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">
+                                {provider && reportDate ? (
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="text-emerald-400">●</span>
+                                        {provider} Report • {reportDate}
+                                    </span>
+                                ) : "Widget Dashboard"}
+                            </div>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-3">
+                        {completeness !== null && (
+                            <div className="hidden sm:flex items-center gap-2 mr-2">
+                                <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Completeness</div>
+                                <div className="text-xs font-black text-white/80">{completeness}%</div>
+                                <div className="h-1 w-12 bg-white/10 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-emerald-500 rounded-full transition-all"
+                                        style={{ width: `${completeness}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <Pill>
                             <span className={cn("font-semibold", statusColor)}>{status}</span>
                         </Pill>
