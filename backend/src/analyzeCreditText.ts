@@ -53,6 +53,13 @@ export type CreditAnalysis = {
         steps: string[];
         expected_impact: string;
     };
+    most_important_action?: {
+        action: string;
+        payment_amount?: string;
+        target_utilization?: string;
+        expected_boost: string;
+        timeline: string;
+    };
     key_findings?: string[];
 };
 
@@ -178,6 +185,18 @@ const schema = {
             },
             required: ["title", "steps", "expected_impact"]
         },
+        most_important_action: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                action: { type: "string" },
+                payment_amount: { type: "string" },
+                target_utilization: { type: "string" },
+                expected_boost: { type: "string" },
+                timeline: { type: "string" }
+            },
+            required: ["action", "expected_boost", "timeline"]
+        },
         key_findings: {
             type: "array",
             items: { type: "string" }
@@ -210,6 +229,10 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
                 - 'projected_score_range': Estimate a score range (e.g. '620-660') if all major issues are resolved.
                 Rank the top 2-3 most impactful issues in 'impact_ranking'.
                 Generate a concrete 'action_plan' with high-level 'steps' and an 'expected_impact' (e.g., "+20 to +40 points").
+                
+                Identify the SINGLE most urgent task as 'most_important_action'. 
+                Be hyper-specific: if it is utilization, calculate the exact dollar 'payment_amount' needed to reach a 'target_utilization' (e.g. 30%).
+                Provide an 'expected_boost' and a 'timeline'.
                 
                 If a field is not present, use null/empty. Do not invent account numbers; if available, only include last4.`,
         },

@@ -246,6 +246,7 @@ export default function AppDashboard() {
     const projectedRange = result?.summary?.projected_score_range ?? null;
     const issues = result?.summary?.issues_count ?? result?.issues_count ?? null;
     const actionPlan = result?.action_plan ?? null;
+    const mia = result?.most_important_action ?? null;
     const nextAction = actionPlan?.title ?? result?.next_best_action ?? "Upload a report to get your next step.";
     const negatives = useMemo(() => {
         const items = result?.negatives ?? result?.top_issues ?? [];
@@ -636,26 +637,50 @@ export default function AppDashboard() {
                         </GlassCard>
 
                         <GlassCard
-                            title="Next Best Move"
-                            icon={<Sparkles className="h-5 w-5 text-white/90" />}
-                            accent="sunset"
+                            title={mia ? "🔥 MOST IMPORTANT ACTION" : "Next Best Move"}
+                            icon={mia ? null : <Sparkles className="h-5 w-5 text-white/90" />}
+                            accent={mia ? "sunset" : "sunset"}
                             onClick={() => {
                                 document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
                             }}
                         >
-                            <div className="text-sm font-bold leading-6 text-white">{nextAction}</div>
-                            {actionPlan && (
-                                <div className="mt-2 space-y-1.5 pb-2">
-                                    {actionPlan.steps.map((step: string, i: number) => (
-                                        <div key={i} className="flex items-start gap-2 text-xs text-white/60">
-                                            <div className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-white/40" />
-                                            {step}
+                            {mia ? (
+                                <div className="space-y-4">
+                                    <div className="text-lg font-black text-white leading-tight">
+                                        {mia.action}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-sm font-bold text-white/80">
+                                            <span className="text-emerald-400">→</span>
+                                            Pay {mia.payment_amount} {mia.target_utilization ? `to reach ${mia.target_utilization}` : ""}
                                         </div>
-                                    ))}
-                                    <div className="mt-3 inline-block rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
-                                        Impact: {actionPlan.expected_impact}
+                                        <div className="flex items-center gap-2 text-sm text-white/60">
+                                            <span className="text-emerald-400">→</span>
+                                            Expected boost: <span className="font-bold text-emerald-400">{mia.expected_boost}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-white/60">
+                                            <span className="text-emerald-400">→</span>
+                                            Timeline: {mia.timeline}
+                                        </div>
                                     </div>
                                 </div>
+                            ) : (
+                                <>
+                                    <div className="text-sm font-bold leading-6 text-white">{nextAction}</div>
+                                    {actionPlan && (
+                                        <div className="mt-2 space-y-1.5 pb-2">
+                                            {actionPlan.steps.map((step: string, i: number) => (
+                                                <div key={i} className="flex items-start gap-2 text-xs text-white/60">
+                                                    <div className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-white/40" />
+                                                    {step}
+                                                </div>
+                                            ))}
+                                            <div className="mt-3 inline-block rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                                                Impact: {actionPlan.expected_impact}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                             <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-white/40 uppercase tracking-wider">
                                 <span>Take Action</span>
