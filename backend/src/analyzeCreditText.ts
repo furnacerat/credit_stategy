@@ -53,8 +53,7 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
 
     // Using the user-preferred openai.responses API
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resp = await (openai as unknown as { responses: any }).responses.create({
+    const resp = await openai.responses.create({
         model,
         input,
         text: {
