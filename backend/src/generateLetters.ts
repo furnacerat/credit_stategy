@@ -4,24 +4,7 @@ import { r2, R2_BUCKET } from './r2.js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { pool } from './db.js';
 
-interface Issue {
-    type: string;
-    severity: string;
-    impact_points: number;
-}
-
-interface AnalysisResult {
-    score_estimate: number;
-    issues_count: number;
-    negatives?: Array<{
-        type: string;
-        creditor: string;
-        date: string;
-        severity: string;
-        impact_points: number;
-    }>;
-    next_best_action: string;
-}
+import type { CreditAnalysis } from './analyzeCreditText.js';
 
 const BUREAUS = ['Equifax', 'Experian', 'TransUnion'];
 
@@ -74,7 +57,7 @@ async function createPDF(text: string): Promise<Buffer> {
     return Buffer.from(pdfBytes);
 }
 
-export async function generateDisputeLetters(reportId: string, userId: string, analysis: AnalysisResult) {
+export async function generateDisputeLetters(reportId: string, userId: string, analysis: CreditAnalysis) {
     console.log(`[LETTERS] Generating letters for report ${reportId}...`);
 
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";

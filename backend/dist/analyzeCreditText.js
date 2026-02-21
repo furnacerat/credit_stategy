@@ -1,57 +1,235 @@
 import { openai } from "./openaiClient.js";
+const evidenceSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        snippet: { type: "string" },
+        page: { type: ["integer", "null"] }
+    },
+    required: ["snippet", "page"]
+};
 const schema = {
     type: "object",
     additionalProperties: false,
     properties: {
-        score_estimate: { type: "integer" },
-        issues_count: { type: "integer" },
-        top_issues: {
+        meta: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                bureau: { enum: ["experian", "equifax", "transunion", "unknown"] },
+                generatedDate: { type: ["string", "null"] },
+                reportSource: { type: ["string", "null"] }
+            },
+            required: ["bureau", "generatedDate", "reportSource"]
+        },
+        score: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                model: { type: ["string", "null"] },
+                value: { type: ["integer", "null"] },
+                rating: { enum: ["Excellent", "Very Good", "Good", "Fair", "Poor", null] },
+                evidence: { type: "array", items: evidenceSchema }
+            },
+            required: ["model", "value", "rating", "evidence"]
+        },
+        accountSummary: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                openAccounts: { type: ["integer", "null"] },
+                closedAccounts: { type: ["integer", "null"] },
+                collectionsCount: { type: ["integer", "null"] },
+                accountsEverLate: { type: ["integer", "null"] },
+                averageAccountAge: { type: ["string", "null"] },
+                oldestAccountAge: { type: ["string", "null"] },
+                evidence: { type: "array", items: evidenceSchema }
+            },
+            required: ["openAccounts", "closedAccounts", "collectionsCount", "accountsEverLate", "averageAccountAge", "oldestAccountAge", "evidence"]
+        },
+        utilization: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                overall: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                        creditUsed: { type: ["integer", "null"] },
+                        creditLimit: { type: ["integer", "null"] },
+                        overallUtilizationPct: { type: ["integer", "null"] },
+                        targetRangePct: {
+                            type: "object",
+                            additionalProperties: false,
+                            properties: {
+                                min: { type: "integer" },
+                                max: { type: "integer" }
+                            },
+                            required: ["min", "max"]
+                        }
+                    },
+                    required: ["creditUsed", "creditLimit", "overallUtilizationPct", "targetRangePct"]
+                },
+                revolvingAccounts: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                            creditor: { type: "string" },
+                            accountType: { enum: ["Credit card", "Charge card", "Revolving", "Line of credit", "Other"] },
+                            balance: { type: ["integer", "null"] },
+                            limit: { type: ["integer", "null"] },
+                            utilizationPct: { type: ["integer", "null"] },
+                            status: { type: ["string", "null"] },
+                            lateCounts: {
+                                type: "object",
+                                additionalProperties: false,
+                                properties: {
+                                    "30": { type: "integer" },
+                                    "60": { type: "integer" },
+                                    "90": { type: "integer" },
+                                    "120plus": { type: "integer" },
+                                    chargeOff: { type: "integer" },
+                                    collection: { type: "integer" }
+                                },
+                                required: ["30", "60", "90", "120plus", "chargeOff", "collection"]
+                            },
+                            evidence: { type: "array", items: evidenceSchema }
+                        },
+                        required: ["creditor", "accountType", "balance", "limit", "utilizationPct", "status", "lateCounts", "evidence"]
+                    }
+                },
+                evidence: { type: "array", items: evidenceSchema }
+            },
+            required: ["overall", "revolvingAccounts", "evidence"]
+        },
+        negatives: {
             type: "array",
             items: {
                 type: "object",
                 additionalProperties: false,
                 properties: {
-                    type: { type: "string" },
-                    severity: { type: "string" },
-                    impact_points: { type: "integer" }
+                    category: { enum: ["Late Payments", "Collection", "Charge Off", "Bankruptcy", "Repossession", "Foreclosure", "Other"] },
+                    creditor: { type: ["string", "null"] },
+                    amount: { type: ["integer", "null"] },
+                    status: { type: ["string", "null"] },
+                    dateOpened: { type: ["string", "null"] },
+                    lastReported: { type: ["string", "null"] },
+                    recencyNote: { type: ["string", "null"] },
+                    severity: { enum: ["Critical", "High", "Medium", "Low"] },
+                    confidence: { type: "number" },
+                    evidence: { type: "array", items: evidenceSchema }
                 },
-                required: ["type", "severity", "impact_points"]
+                required: ["category", "creditor", "amount", "status", "dateOpened", "lastReported", "recencyNote", "severity", "confidence", "evidence"]
             }
         },
-        next_best_action: { type: "string" }
+        inquiries: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    creditor: { type: ["string", "null"] },
+                    date: { type: ["string", "null"] },
+                    type: { enum: ["Hard", "Soft", "Unknown"] },
+                    evidence: { type: "array", items: evidenceSchema }
+                },
+                required: ["creditor", "date", "type", "evidence"]
+            }
+        },
+        impactRanking: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    priority: { type: "integer" },
+                    issueKey: { type: "string" },
+                    title: { type: "string" },
+                    whyItMatters: { type: "string" },
+                    whatToDoNext: { type: "array", items: { type: "string" } },
+                    expectedImpact: { type: ["string", "null"] },
+                    evidence: { type: "array", items: evidenceSchema }
+                },
+                required: ["priority", "issueKey", "title", "whyItMatters", "whatToDoNext", "expectedImpact", "evidence"]
+            }
+        },
+        nextBestMove: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                title: { type: "string" },
+                steps: { type: "array", items: { type: "string" } },
+                expectedImpact: { type: ["string", "null"] },
+                timeframe: { type: ["string", "null"] },
+                evidence: { type: "array", items: evidenceSchema }
+            },
+            required: ["title", "steps", "expectedImpact", "timeframe", "evidence"]
+        },
+        quality: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                completenessScore: { type: "integer" },
+                missingFields: { type: "array", items: { type: "string" } },
+                warnings: { type: "array", items: { type: "string" } }
+            },
+            required: ["completenessScore", "missingFields", "warnings"]
+        }
     },
-    required: ["score_estimate", "issues_count", "top_issues", "next_best_action"]
+    required: ["meta", "score", "accountSummary", "utilization", "negatives", "inquiries", "impactRanking", "nextBestMove", "quality"]
 };
 export async function analyzeCreditText(rawText) {
-    console.log("[AI] Starting structured analysis with gpt-4o-mini using responses API...");
-    const input = [
+    console.log("[AI] Starting structured analysis with gpt-4o-mini using json_schema...");
+    const messages = [
         {
             role: "system",
-            content: "You extract structured credit-report facts from text. If a field is not present, use null/empty. Do not invent account numbers; if available, only include last4.",
+            content: `You are Credit Strategy AI’s Report Extraction Engine.
+
+                Your job: extract structured credit metrics from raw credit report text and return VALID JSON ONLY that matches the provided schema.
+
+                Rules:
+                - Output MUST be JSON only. No markdown, no commentary.
+                - Do NOT guess. If a value is not present, use null and add an item to quality.missingFields.
+                - Every metric shown to the user MUST include evidence: a short snippet from the source text and an optional page number if available.
+                - Prefer numbers over adjectives. Convert $ and % to numeric values.
+                - If you see contradictory values, choose the value that appears in the “At a glance” or “Account summary” area and record a warning in quality.warnings.
+                - Never output >100% utilization.
+                - Do not include PII (full SSN, full account numbers, DOB, full address). Redact with "***" if it appears in evidence snippets.
+                - Compute derived fields when inputs exist (e.g., overallUtilizationPct = creditUsed / creditLimit * 100).
+                - Provide a ranked “impactRanking” list with priority 1..N (1 is highest priority) based on severity, recency, and known scoring impact (payment history > utilization > derogatories > inquiries > age/mix).
+                
+                Targets:
+                - Score model + value (e.g., “FICO Score 8 551”).
+                - Generated date.
+                - Account summary counts (open accounts, accounts ever late, collections).
+                - Overall credit used + credit limit and derived utilization %.
+                - Revolving accounts: creditor name, balance, limit, per-account utilization.
+                - Identify severe negatives: collections, charge-offs, over-limit utilization, recent lates.`,
         },
         {
             role: "user",
             content: `Extract structured data from this credit report text:\n\n---\n${rawText.slice(0, 30000)}\n---`,
         },
     ];
-    // Using the user-preferred openai.responses API
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-    const resp = await openai.responses.create({
+    const resp = await openai.chat.completions.create({
         model,
-        input,
-        text: {
-            format: {
-                type: "json_schema",
+        messages,
+        response_format: {
+            type: "json_schema",
+            json_schema: {
                 name: "credit_report_analysis",
                 strict: true,
                 schema: schema,
-            }
+            },
         },
     });
-    const text = resp.output_text;
-    if (!text) {
-        throw new Error("AI returned empty output_text");
+    const content = resp.choices?.[0]?.message?.content;
+    if (!content) {
+        throw new Error("AI returned empty content");
     }
-    return JSON.parse(text);
+    return JSON.parse(content);
 }
 //# sourceMappingURL=analyzeCreditText.js.map

@@ -1,177 +1,203 @@
-import { openai } from "./openaiClient.js";
-
 export type Evidence = {
-    text: string;
-    page_number?: number;
+    snippet: string;
+    page?: number | null;
 };
 
 export type CreditAnalysis = {
-    summary: {
-        score: number;
-        rating: string;
-        primary_issues: string[];
-        top_score_killers: Array<{
-            label: string;
-            impact: string; // e.g. "19 instances" or "38%"
-        }>;
-        projected_score_range: string; // e.g. "620–660"
-        provider?: string; // e.g. "Experian"
-        report_date?: string; // e.g. "Feb 2, 2026"
-        completeness_percentage: number; // 0-100
-        evidence?: Evidence;
+    meta: {
+        bureau: "experian" | "equifax" | "transunion" | "unknown";
+        generatedDate: string | null;
+        reportSource: string | null;
     };
-    impact_ranking: Array<{
-        issue: string;
-        priority: number;
-        impact_score: number;
-        severity: "CRITICAL" | "HIGH" | "MEDIUM";
-        details: string[]; // e.g. ["Affects 35% of score", "Last late: Dec 2025"]
-        why: string;
-        evidence?: Evidence;
-    }>;
-    score_estimate: number;
-    issues_count: number;
-    utilization?: {
-        overall_percent: number;
-        revolving_accounts: Array<{
+    score: {
+        model: string | null;
+        value: number | null;
+        rating: "Excellent" | "Very Good" | "Good" | "Fair" | "Poor" | null;
+        evidence: Evidence[];
+    };
+    accountSummary: {
+        openAccounts: number | null;
+        closedAccounts: number | null;
+        collectionsCount: number | null;
+        accountsEverLate: number | null;
+        averageAccountAge: string | null;
+        oldestAccountAge: string | null;
+        evidence: Evidence[];
+    };
+    utilization: {
+        overall: {
+            creditUsed: number | null;
+            creditLimit: number | null;
+            overallUtilizationPct: number | null;
+            targetRangePct: { min: number; max: number };
+        };
+        revolvingAccounts: Array<{
             creditor: string;
-            balance: string;
-            limit: string;
-            utilization_percent: number;
-            evidence?: Evidence;
+            accountType: "Credit card" | "Charge card" | "Revolving" | "Line of credit" | "Other";
+            balance: number | null;
+            limit: number | null;
+            utilizationPct: number | null;
+            status: string | null;
+            lateCounts: {
+                "30": number;
+                "60": number;
+                "90": number;
+                "120plus": number;
+                chargeOff: number;
+                collection: number;
+            };
+            evidence: Evidence[];
         }>;
-        evidence?: Evidence;
+        evidence: Evidence[];
     };
-    negatives?: Array<{
-        type: string;
-        creditor: string;
-        date: string;
-        severity: string;
-        impact_points: number;
-        priority_scoring: {
-            impact_weight: number;    // 1-10
-            severity_score: number;  // 1-10
-            recency_score: number;   // 1-10 (higher if recent)
-            confidence_score: number; // 0.0-1.0
-            total_priority: number;  // Result of impactWeight × severity × recency × confidence
-        }
-        evidence?: Evidence;
+    negatives: Array<{
+        category: "Late Payments" | "Collection" | "Charge Off" | "Bankruptcy" | "Repossession" | "Foreclosure" | "Other";
+        creditor: string | null;
+        amount: number | null;
+        status: string | null;
+        dateOpened: string | null;
+        lastReported: string | null;
+        recencyNote: string | null;
+        severity: "Critical" | "High" | "Medium" | "Low";
+        confidence: number;
+        evidence: Evidence[];
     }>;
-    inquiries?: Array<{
-        creditor: string;
-        date: string;
-        bureau: string;
-        evidence?: Evidence;
+    inquiries: Array<{
+        creditor: string | null;
+        date: string | null;
+        type: "Hard" | "Soft" | "Unknown";
+        evidence: Evidence[];
     }>;
-    next_best_action: string;
-    action_plan?: {
+    impactRanking: Array<{
+        priority: number;
+        issueKey: string;
+        title: string;
+        whyItMatters: string;
+        whatToDoNext: string[];
+        expectedImpact: string | null;
+        evidence: Evidence[];
+    }>;
+    nextBestMove: {
         title: string;
         steps: string[];
-        expected_impact: string;
-    };
-    most_important_action?: {
-        action: string;
-        payment_amount?: string;
-        target_utilization?: string;
-        expected_boost: string;
-        timeline: string;
+        expectedImpact: string | null;
+        timeframe: string | null;
+        evidence: Evidence[];
     };
     quality: {
-        missing_fields: string[];
+        completenessScore: number;
+        missingFields: string[];
         warnings: string[];
     };
-    key_findings?: string[];
 };
+
+import { openai } from "./openaiClient.js";
 
 const evidenceSchema = {
     type: "object",
     additionalProperties: false,
     properties: {
-        text: { type: "string" },
-        page_number: { type: "integer" }
+        snippet: { type: "string" },
+        page: { type: ["integer", "null"] }
     },
-    required: ["text"]
+    required: ["snippet", "page"]
 } as const;
 
 const schema = {
     type: "object",
     additionalProperties: false,
     properties: {
-        summary: {
+        meta: {
             type: "object",
             additionalProperties: false,
             properties: {
-                score: { type: "integer" },
-                rating: { type: "string" },
-                primary_issues: {
-                    type: "array",
-                    items: { type: "string" }
-                },
-                top_score_killers: {
-                    type: "array",
-                    items: {
-                        type: "object",
-                        additionalProperties: false,
-                        properties: {
-                            label: { type: "string" },
-                            impact: { type: "string" }
-                        },
-                        required: ["label", "impact"]
-                    }
-                },
-                projected_score_range: { type: "string" },
-                provider: { type: "string" },
-                report_date: { type: "string" },
-                completeness_percentage: { type: "integer" },
-                evidence: evidenceSchema
+                bureau: { enum: ["experian", "equifax", "transunion", "unknown"] },
+                generatedDate: { type: ["string", "null"] },
+                reportSource: { type: ["string", "null"] }
             },
-            required: ["score", "rating", "primary_issues", "top_score_killers", "projected_score_range", "completeness_percentage"]
+            required: ["bureau", "generatedDate", "reportSource"]
         },
-        impact_ranking: {
-            type: "array",
-            items: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                    issue: { type: "string" },
-                    priority: { type: "integer" },
-                    impact_score: { type: "integer" },
-                    severity: { enum: ["CRITICAL", "HIGH", "MEDIUM"] },
-                    details: {
-                        type: "array",
-                        items: { type: "string" }
-                    },
-                    why: { type: "string" },
-                    evidence: evidenceSchema
-                },
-                required: ["issue", "priority", "impact_score", "severity", "details", "why"]
-            }
+        score: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                model: { type: ["string", "null"] },
+                value: { type: ["integer", "null"] },
+                rating: { enum: ["Excellent", "Very Good", "Good", "Fair", "Poor", null] },
+                evidence: { type: "array", items: evidenceSchema }
+            },
+            required: ["model", "value", "rating", "evidence"]
         },
-        score_estimate: { type: "integer" },
-        issues_count: { type: "integer" },
+        accountSummary: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                openAccounts: { type: ["integer", "null"] },
+                closedAccounts: { type: ["integer", "null"] },
+                collectionsCount: { type: ["integer", "null"] },
+                accountsEverLate: { type: ["integer", "null"] },
+                averageAccountAge: { type: ["string", "null"] },
+                oldestAccountAge: { type: ["string", "null"] },
+                evidence: { type: "array", items: evidenceSchema }
+            },
+            required: ["openAccounts", "closedAccounts", "collectionsCount", "accountsEverLate", "averageAccountAge", "oldestAccountAge", "evidence"]
+        },
         utilization: {
             type: "object",
             additionalProperties: false,
             properties: {
-                overall_percent: { type: "integer" },
-                revolving_accounts: {
+                overall: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                        creditUsed: { type: ["integer", "null"] },
+                        creditLimit: { type: ["integer", "null"] },
+                        overallUtilizationPct: { type: ["integer", "null"] },
+                        targetRangePct: {
+                            type: "object",
+                            additionalProperties: false,
+                            properties: {
+                                min: { type: "integer" },
+                                max: { type: "integer" }
+                            },
+                            required: ["min", "max"]
+                        }
+                    },
+                    required: ["creditUsed", "creditLimit", "overallUtilizationPct", "targetRangePct"]
+                },
+                revolvingAccounts: {
                     type: "array",
                     items: {
                         type: "object",
                         additionalProperties: false,
                         properties: {
                             creditor: { type: "string" },
-                            balance: { type: "string" },
-                            limit: { type: "string" },
-                            utilization_percent: { type: "integer" },
-                            evidence: evidenceSchema
+                            accountType: { enum: ["Credit card", "Charge card", "Revolving", "Line of credit", "Other"] },
+                            balance: { type: ["integer", "null"] },
+                            limit: { type: ["integer", "null"] },
+                            utilizationPct: { type: ["integer", "null"] },
+                            status: { type: ["string", "null"] },
+                            lateCounts: {
+                                type: "object",
+                                additionalProperties: false,
+                                properties: {
+                                    "30": { type: "integer" },
+                                    "60": { type: "integer" },
+                                    "90": { type: "integer" },
+                                    "120plus": { type: "integer" },
+                                    chargeOff: { type: "integer" },
+                                    collection: { type: "integer" }
+                                },
+                                required: ["30", "60", "90", "120plus", "chargeOff", "collection"]
+                            },
+                            evidence: { type: "array", items: evidenceSchema }
                         },
-                        required: ["creditor", "balance", "limit", "utilization_percent"]
+                        required: ["creditor", "accountType", "balance", "limit", "utilizationPct", "status", "lateCounts", "evidence"]
                     }
                 },
-                evidence: evidenceSchema
+                evidence: { type: "array", items: evidenceSchema }
             },
-            required: ["overall_percent", "revolving_accounts"]
+            required: ["overall", "revolvingAccounts", "evidence"]
         },
         negatives: {
             type: "array",
@@ -179,26 +205,18 @@ const schema = {
                 type: "object",
                 additionalProperties: false,
                 properties: {
-                    type: { type: "string" },
-                    creditor: { type: "string" },
-                    date: { type: "string" },
-                    severity: { type: "string" },
-                    impact_points: { type: "integer" },
-                    priority_scoring: {
-                        type: "object",
-                        additionalProperties: false,
-                        properties: {
-                            impact_weight: { type: "integer" },
-                            severity_score: { type: "integer" },
-                            recency_score: { type: "integer" },
-                            confidence_score: { type: "number" },
-                            total_priority: { type: "number" }
-                        },
-                        required: ["impact_weight", "severity_score", "recency_score", "confidence_score", "total_priority"]
-                    },
-                    evidence: evidenceSchema
+                    category: { enum: ["Late Payments", "Collection", "Charge Off", "Bankruptcy", "Repossession", "Foreclosure", "Other"] },
+                    creditor: { type: ["string", "null"] },
+                    amount: { type: ["integer", "null"] },
+                    status: { type: ["string", "null"] },
+                    dateOpened: { type: ["string", "null"] },
+                    lastReported: { type: ["string", "null"] },
+                    recencyNote: { type: ["string", "null"] },
+                    severity: { enum: ["Critical", "High", "Medium", "Low"] },
+                    confidence: { type: "number" },
+                    evidence: { type: "array", items: evidenceSchema }
                 },
-                required: ["type", "creditor", "date", "severity", "impact_points", "priority_scoring"]
+                required: ["category", "creditor", "amount", "status", "dateOpened", "lastReported", "recencyNote", "severity", "confidence", "evidence"]
             }
         },
         inquiries: {
@@ -207,61 +225,55 @@ const schema = {
                 type: "object",
                 additionalProperties: false,
                 properties: {
-                    creditor: { type: "string" },
-                    date: { type: "string" },
-                    bureau: { type: "string" },
-                    evidence: evidenceSchema
+                    creditor: { type: ["string", "null"] },
+                    date: { type: ["string", "null"] },
+                    type: { enum: ["Hard", "Soft", "Unknown"] },
+                    evidence: { type: "array", items: evidenceSchema }
                 },
-                required: ["creditor", "date", "bureau"]
+                required: ["creditor", "date", "type", "evidence"]
             }
         },
-        next_best_action: { type: "string" },
-        action_plan: {
+        impactRanking: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    priority: { type: "integer" },
+                    issueKey: { type: "string" },
+                    title: { type: "string" },
+                    whyItMatters: { type: "string" },
+                    whatToDoNext: { type: "array", items: { type: "string" } },
+                    expectedImpact: { type: ["string", "null"] },
+                    evidence: { type: "array", items: evidenceSchema }
+                },
+                required: ["priority", "issueKey", "title", "whyItMatters", "whatToDoNext", "expectedImpact", "evidence"]
+            }
+        },
+        nextBestMove: {
             type: "object",
             additionalProperties: false,
             properties: {
                 title: { type: "string" },
-                steps: {
-                    type: "array",
-                    items: { type: "string" }
-                },
-                expected_impact: { type: "string" }
+                steps: { type: "array", items: { type: "string" } },
+                expectedImpact: { type: ["string", "null"] },
+                timeframe: { type: ["string", "null"] },
+                evidence: { type: "array", items: evidenceSchema }
             },
-            required: ["title", "steps", "expected_impact"]
-        },
-        most_important_action: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-                action: { type: "string" },
-                payment_amount: { type: "string" },
-                target_utilization: { type: "string" },
-                expected_boost: { type: "string" },
-                timeline: { type: "string" }
-            },
-            required: ["action", "expected_boost", "timeline"]
+            required: ["title", "steps", "expectedImpact", "timeframe", "evidence"]
         },
         quality: {
             type: "object",
             additionalProperties: false,
             properties: {
-                missing_fields: {
-                    type: "array",
-                    items: { type: "string" }
-                },
-                warnings: {
-                    type: "array",
-                    items: { type: "string" }
-                }
+                completenessScore: { type: "integer" },
+                missingFields: { type: "array", items: { type: "string" } },
+                warnings: { type: "array", items: { type: "string" } }
             },
-            required: ["missing_fields", "warnings"]
-        },
-        key_findings: {
-            type: "array",
-            items: { type: "string" }
+            required: ["completenessScore", "missingFields", "warnings"]
         }
     },
-    required: ["summary", "impact_ranking", "score_estimate", "issues_count", "next_best_action", "action_plan", "quality"]
+    required: ["meta", "score", "accountSummary", "utilization", "negatives", "inquiries", "impactRanking", "nextBestMove", "quality"]
 } as const;
 
 export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis> {
@@ -277,31 +289,22 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
 
                 Rules:
                 - Output MUST be JSON only. No markdown, no commentary.
-                - Do NOT guess. If a value is not present, use null and add an item to quality.missing_fields.
-                - Every metric shown to the user MUST include evidence: a short snippet from the source text and an optional page_number if available.
+                - Do NOT guess. If a value is not present, use null and add an item to quality.missingFields.
+                - Every metric shown to the user MUST include evidence: a short snippet from the source text and an optional page number if available.
                 - Prefer numbers over adjectives. Convert $ and % to numeric values.
                 - If you see contradictory values, choose the value that appears in the “At a glance” or “Account summary” area and record a warning in quality.warnings.
                 - Never output >100% utilization.
                 - Do not include PII (full SSN, full account numbers, DOB, full address). Redact with "***" if it appears in evidence snippets.
                 - Compute derived fields when inputs exist (e.g., overallUtilizationPct = creditUsed / creditLimit * 100).
+                - Provide a ranked “impactRanking” list with priority 1..N (1 is highest priority) based on severity, recency, and known scoring impact (payment history > utilization > derogatories > inquiries > age/mix).
                 
-                Scoring Logic:
-                For each negative item, calculate a priority_scoring object using this formula: 
-                priorityScore = impact_weight (1-10) × severity_score (1-10) × recency_score (1-10) × confidence_score (0.0-1.0).
-                - impact_weight: How much this type of item usually affects a score (e.g., Bankruptcy=10, Late Pay=5).
-                - severity_score: How bad this specific instance is (e.g., 90 days late=9, 30 days=3).
-                - recency_score: Higher if the item is recent (e.g., last 6 months=10, 5 years ago=2).
-                - confidence_score: Your level of certainty about the data extraction (0.0 to 1.0).
-                
-                Categorization:
-                - Categorize 'impact_ranking' issues by 'severity' (CRITICAL, HIGH, MEDIUM).
-                - Provide 1-2 'details' bullets per impact item.
-                - Provide a ranked “impact_ranking” list with priority 1..N (1 is highest priority) based on severity, recency, and known scoring impact (payment history > utilization > derogatories > inquiries > age/mix).
-
-                Summary & Actions:
-                - Identify the bureau (Experian, Equifax, TransUnion, or Generic) and report date.
-                - Calculate completeness_percentage based on data density.
-                - Identify the SINGLE most urgent task as 'most_important_action'. Be specific with dollar amounts if possible.`,
+                Targets:
+                - Score model + value (e.g., “FICO Score 8 551”).
+                - Generated date.
+                - Account summary counts (open accounts, accounts ever late, collections).
+                - Overall credit used + credit limit and derived utilization %.
+                - Revolving accounts: creditor name, balance, limit, per-account utilization.
+                - Identify severe negatives: collections, charge-offs, over-limit utilization, recent lates.`,
         },
         {
             role: "user" as const,

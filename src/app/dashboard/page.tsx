@@ -239,23 +239,48 @@ export default function AppDashboard() {
         []
     );
 
-    const score = result?.summary?.score ?? result?.score_estimate ?? null;
-    const rating = result?.summary?.rating ?? null;
-    const provider = result?.summary?.provider ?? null;
-    const reportDate = result?.summary?.report_date ?? null;
-    const completeness = result?.summary?.completeness_percentage ?? null;
-    const primaryIssues = result?.summary?.primary_issues ?? [];
-    const scoreKillers = result?.summary?.top_score_killers ?? [];
-    const impactRanking = result?.impact_ranking ?? [];
-    const projectedRange = result?.summary?.projected_score_range ?? null;
-    const issues = result?.summary?.issues_count ?? result?.issues_count ?? null;
-    const actionPlan = result?.action_plan ?? null;
-    const mia = result?.most_important_action ?? null;
-    const nextAction = actionPlan?.title ?? result?.next_best_action ?? "Upload a report to get your next step.";
-    const negatives = useMemo(() => {
-        const items = result?.negatives ?? result?.top_issues ?? [];
-        return [...items].sort((a, b) => (b.priority_scoring?.total_priority || 0) - (a.priority_scoring?.total_priority || 0));
+    const score = result?.score?.value ?? null;
+    const rating = result?.score?.rating ?? null;
+    const provider = result?.meta?.bureau ?? null;
+    const reportDate = result?.meta?.generatedDate ?? null;
+    const completeness = result?.quality?.completenessScore ?? null;
+    const primaryIssues = result?.impactRanking?.slice(0, 3).map((ir: any) => ir.title) ?? [];
+
+    // Adapted from impactRanking for "Score Killers" visualization
+    const scoreKillers = useMemo(() => {
+        return (result?.impactRanking || [])
+            .filter((ir: any) => ir.priority <= 3)
+            .map((ir: any) => ({
+                label: ir.title,
+                impact: ir.expectedImpact || "High"
+            }));
     }, [result]);
+
+    const impactRanking = result?.impactRanking ?? [];
+    const projectedRange = result?.nextBestMove?.expectedImpact ?? null;
+    const issues = result?.accountSummary?.collectionsCount ? (result.accountSummary.collectionsCount + (result.accountSummary.accountsEverLate || 0)) : (result?.negatives?.length ?? 0);
+    const actionPlan = result?.nextBestMove ?? null;
+
+    // In the new schema, most_important_action is effectively the nextBestMove
+    const mia = result?.nextBestMove ? {
+        action: result.nextBestMove.title,
+        steps: result.nextBestMove.steps,
+        expected_boost: result.nextBestMove.expectedImpact || "Unknown",
+        timeline: result.nextBestMove.timeframe || "Unknown",
+        // The new schema doesn't have pay-specific fields in nextBestMove yet, 
+        // but we'll adapt the UI or use the steps.
+    } : null;
+
+    const nextAction = result?.nextBestMove?.title ?? "Upload a report to get your next step.";
+
+    const negatives = useMemo(() => {
+        const items = result?.negatives ?? [];
+        return [...items].sort((a, b) => {
+            const severityMap: any = { "Critical": 4, "High": 3, "Medium": 2, "Low": 1 };
+            return (severityMap[b.severity] || 0) - (severityMap[a.severity] || 0);
+        });
+    }, [result]);
+
     const inquiries = result?.inquiries ?? [];
     const util = result?.utilization ?? {};
 
@@ -583,21 +608,26 @@ export default function AppDashboard() {
                                                     <div className="flex items-center gap-2">
                                                         <span className={cn(
                                                             "text-xs font-black uppercase tracking-tighter px-2 py-0.5 rounded",
-                                                            item.severity === "CRITICAL" ? "bg-rose-500/20 text-rose-400" :
-                                                                item.severity === "HIGH" ? "bg-amber-500/20 text-amber-400" :
+                                                            item.severity === "Critical" ? "bg-rose-500/20 text-rose-400" :
+                                                                item.severity === "High" ? "bg-amber-500/20 text-amber-400" :
                                                                     "bg-emerald-500/20 text-emerald-400"
                                                         )}>
-                                                            {item.severity === "CRITICAL" ? "🔴 CRITICAL" :
-                                                                item.severity === "HIGH" ? "🟠 HIGH" :
+                                                            {item.severity === "Critical" ? "🔴 CRITICAL" :
+                                                                item.severity === "High" ? "🟠 HIGH" :
                                                                     "🟡 MEDIUM"}
                                                         </span>
-                                                        <span className="text-sm font-bold text-white/90">{item.issue}</span>
+                                                        <span className="text-sm font-bold text-white/90">{item.title}</span>
                                                     </div>
                                                     <div className="pl-2 space-y-1">
-                                                        {item.details.map((detail: string, j: number) => (
-                                                            <div key={j} className="flex items-center gap-2 text-xs text-white/50">
-                                                                <span className="text-white/30 text-[10px]">→</span>
-                                                                {detail}
+                                                        <div className="flex items-center gap-2 text-xs text-white/70">
+                                                            <span className="text-emerald-400">?</span>
+                                                            {item.whyItMatters}
+                                                        </div>
+                                                        {item.evidence?.map((ev: any, j: number) => (
+                                                            <div key={j} className="flex items-center gap-2 text-[10px] text-white/30 italic">
+                                                                <span className="text-white/20">“</span>
+                                                                {ev.snippet}
+                                                                <span className="text-white/20">”</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -687,10 +717,12 @@ export default function AppDashboard() {
                                         {mia.action}
                                     </div>
                                     <div className="space-y-2">
-                                        <div className="flex items-center gap-2 text-sm font-bold text-white/80">
-                                            <span className="text-emerald-400">→</span>
-                                            Pay {mia.payment_amount} {mia.target_utilization ? `to reach ${mia.target_utilization}` : ""}
-                                        </div>
+                                        {mia.steps?.map((step: string, i: number) => (
+                                            <div key={i} className="flex items-center gap-2 text-sm font-bold text-white/80">
+                                                <span className="text-emerald-400">→</span>
+                                                {step}
+                                            </div>
+                                        ))}
                                         <div className="flex items-center gap-2 text-sm text-white/60">
                                             <span className="text-emerald-400">→</span>
                                             Expected boost: <span className="font-bold text-emerald-400">{mia.expected_boost}</span>
@@ -737,37 +769,39 @@ export default function AppDashboard() {
                             <div className="flex items-end justify-between">
                                 <div>
                                     <div className="text-4xl font-black">
-                                        {util?.overall_percent ?? "—"}%
-                                        {util?.overall_percent > 30 && <span className="ml-2 text-2xl">⚠️</span>}
-                                        {util?.overall_percent > 100 && <span className="ml-2 text-2xl">❌</span>}
+                                        {util?.overall?.overallUtilizationPct ?? "—"}%
+                                        {util?.overall?.overallUtilizationPct > 30 && <span className="ml-2 text-2xl">⚠️</span>}
+                                        {util?.overall?.overallUtilizationPct > 100 && <span className="ml-2 text-2xl">❌</span>}
                                     </div>
                                     <div className="mt-1 text-xs text-white/60">Overall revolving utilization</div>
                                 </div>
                                 <div className="text-right">
                                     <div className="text-xs text-white/40 uppercase tracking-widest font-bold">Target</div>
-                                    <div className="text-sm text-emerald-400 font-bold">1–9%</div>
+                                    <div className="text-sm text-emerald-400 font-bold">
+                                        {util?.overall?.targetRangePct?.min ?? 1}–{util?.overall?.targetRangePct?.max ?? 9}%
+                                    </div>
                                 </div>
                             </div>
 
                             <div className="mt-4 space-y-2">
-                                {(util?.revolving_accounts || []).slice(0, 3).map((a: any, idx: number) => (
+                                {(util?.revolvingAccounts || []).slice(0, 3).map((a: any, idx: number) => (
                                     <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-3">
                                         <div className="flex items-center justify-between text-sm">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-semibold">{a.creditor || "Card"}</span>
-                                                {a.utilization_percent > 100 ? "❌" : a.utilization_percent > 9 ? "⚠️" : ""}
+                                                {a.utilizationPct > 100 ? "❌" : a.utilizationPct > 9 ? "⚠️" : ""}
                                             </div>
                                             <span className={cn(
                                                 "font-bold",
-                                                a.utilization_percent > 30 ? "text-rose-400" : "text-emerald-400"
-                                            )}>{a.utilization_percent ?? "—"}%</span>
+                                                a.utilizationPct > 30 ? "text-rose-400" : "text-emerald-400"
+                                            )}>{a.utilizationPct ?? "—"}%</span>
                                         </div>
                                         <div className="mt-1 text-xs text-white/60">
                                             Bal: {a.balance ?? "—"} • Limit: {a.limit ?? "—"}
                                         </div>
                                     </div>
                                 ))}
-                                {!util?.revolving_accounts?.length ? (
+                                {!util?.revolvingAccounts?.length ? (
                                     <div className="text-sm text-white/70">No utilization lines parsed yet.</div>
                                 ) : null}
                             </div>
@@ -907,12 +941,12 @@ export default function AppDashboard() {
                     <div>
                         <h3 className="text-sm font-bold text-white/80 mb-3 px-1 uppercase tracking-wider">Account Breakdown</h3>
                         <div className="space-y-3">
-                            {(util?.revolving_accounts || []).map((a: any, idx: number) => (
+                            {(util?.revolvingAccounts || []).map((a: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 p-4 transition-colors hover:bg-white/10">
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <div className="font-bold text-white">{a.creditor || "Revolving Account"}</div>
-                                            {a.utilization_percent > 100 ? "❌" : a.utilization_percent > 9 ? "⚠️" : ""}
+                                            {a.utilizationPct > 100 ? "❌" : a.utilizationPct > 9 ? "⚠️" : ""}
                                         </div>
                                         <div className="text-xs text-white/50">
                                             Balance: <span className="text-white/80">{a.balance}</span> • Limit: <span className="text-white/80">{a.limit}</span>
@@ -921,15 +955,15 @@ export default function AppDashboard() {
                                     <div className="text-right">
                                         <div className={cn(
                                             "text-lg font-black",
-                                            a.utilization_percent > 30 ? "text-rose-400" : "text-emerald-400"
-                                        )}>{a.utilization_percent}%</div>
+                                            a.utilizationPct > 30 ? "text-rose-400" : "text-emerald-400"
+                                        )}>{a.utilizationPct}%</div>
                                         <div className="h-1.5 w-24 bg-white/10 rounded-full mt-1 overflow-hidden">
                                             <div
                                                 className={cn(
                                                     "h-full rounded-full transition-all",
-                                                    a.utilization_percent > 30 ? "bg-rose-500" : "bg-emerald-500"
+                                                    a.utilizationPct > 30 ? "bg-rose-400" : "bg-emerald-400"
                                                 )}
-                                                style={{ width: `${Math.min(a.utilization_percent, 100)}%` }}
+                                                style={{ width: `${Math.min(a.utilizationPct || 0, 100)}%` }}
                                             />
                                         </div>
                                     </div>
