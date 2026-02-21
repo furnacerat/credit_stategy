@@ -42,7 +42,11 @@ function safeFilename(name: string) {
 }
 
 // One-time: ensure tables exist (simple for MVP)
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "https://creditstrategyai.com");
+  return res.json({ ok: true });
+});
+
 
 app.post("/admin/migrate", async (_req, res) => {
   try {
