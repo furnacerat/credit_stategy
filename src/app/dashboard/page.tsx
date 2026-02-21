@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from "recharts";
 import {
-    AreaChart,
-    Area,
-    ResponsiveContainer,
-    Tooltip,
-} from "recharts";
-import { Upload, FileText, Sparkles, AlertTriangle, ShieldCheck, Activity, X, ChevronRight, ExternalLink } from "lucide-react";
+    Upload,
+    FileText,
+    Sparkles,
+    AlertTriangle,
+    ShieldCheck,
+    Activity,
+    X,
+    ChevronRight,
+    ExternalLink,
+} from "lucide-react";
+
+import { WidgetCard } from "@/components/WidgetCard";
+import { ReportHeader } from "@/components/ReportHeader";
+import { DashboardGrid } from "@/components/DashboardGrid";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
 
@@ -36,21 +45,23 @@ type CreateReportResp =
     | { ok: false; error: any };
 
 type JobResp =
-    | { ok: true; job: { id: string; status: "queued" | "processing" | "complete" | "failed"; progress?: string | null; error?: string | null; report_id: string } }
-    | { ok: false; error: any };
-
-type ResultResp =
-    | { ok: true; result: { result_json: any; created_at: string } }
+    | {
+        ok: true;
+        job: {
+            id: string;
+            status: "queued" | "processing" | "complete" | "failed";
+            progress?: string | null;
+            error?: string | null;
+            report_id: string;
+        };
+    }
     | { ok: false; error: any };
 
 // ------------------ UI atoms ------------------
 function GradientOrb({ className }: { className?: string }) {
     return (
         <div
-            className={cn(
-                "pointer-events-none absolute -z-10 blur-3xl opacity-70",
-                className
-            )}
+            className={cn("pointer-events-none absolute -z-10 blur-3xl opacity-70", className)}
             style={{
                 background:
                     "radial-gradient(closest-side, rgba(0,255,170,.35), transparent 65%), radial-gradient(closest-side, rgba(120,80,255,.30), transparent 62%), radial-gradient(closest-side, rgba(255,80,180,.22), transparent 60%)",
@@ -59,77 +70,13 @@ function GradientOrb({ className }: { className?: string }) {
     );
 }
 
-function GlassCard({
-    title,
-    icon,
-    accent,
+function Pill({
     children,
-    className,
-    footer,
-    onClick,
+    color = "white",
 }: {
-    title: string;
-    icon?: React.ReactNode;
-    accent?: "mint" | "violet" | "sunset" | "ice" | "amber";
     children: React.ReactNode;
-    className?: string;
-    footer?: React.ReactNode;
-    onClick?: () => void;
+    color?: "white" | "rose" | "amber";
 }) {
-    const accentMap: Record<string, string> = {
-        mint: "from-emerald-400/25 via-cyan-400/20 to-fuchsia-400/15",
-        violet: "from-violet-500/25 via-fuchsia-400/20 to-cyan-400/15",
-        sunset: "from-rose-500/25 via-orange-400/20 to-violet-400/15",
-        ice: "from-sky-400/22 via-indigo-400/18 to-emerald-400/14",
-        amber: "from-amber-400/25 via-orange-400/18 to-rose-400/14",
-    };
-
-    return (
-        <motion.div
-            whileHover={onClick ? { y: -4, scale: 1.02 } : { y: -2, scale: 1.01 }}
-            transition={{ type: "spring", stiffness: 260, damping: 22 }}
-            onClick={onClick}
-            className={cn(
-                "relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_8px_30px_rgba(0,0,0,.35)] backdrop-blur-xl",
-                onClick && "cursor-pointer group hover:border-white/20",
-                className
-            )}
-        >
-            <div className={cn("absolute inset-0 -z-10 bg-gradient-to-br", accentMap[accent || "violet"])} />
-            <div className="absolute inset-0 -z-10 opacity-40" style={{
-                backgroundImage:
-                    "radial-gradient(circle at 20% 10%, rgba(255,255,255,.10), transparent 35%), radial-gradient(circle at 80% 40%, rgba(255,255,255,.08), transparent 40%)",
-            }} />
-
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 border border-white/10 group-hover:bg-white/20 transition-colors">
-                        {icon}
-                    </div>
-                    <div>
-                        <div className="text-sm font-semibold text-white/90">{title}</div>
-                        <div className="text-xs text-white/60">Live from latest report</div>
-                    </div>
-                </div>
-                {onClick ? (
-                    <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" />
-                ) : (
-                    <div className="h-2 w-2 rounded-full bg-emerald-400/90 shadow-[0_0_16px_rgba(52,211,153,.65)]" />
-                )}
-            </div>
-
-            <div className="mt-4">{children}</div>
-
-            {footer ? (
-                <div className="mt-4 border-t border-white/10 pt-3 text-xs text-white/70">
-                    {footer}
-                </div>
-            ) : null}
-        </motion.div>
-    );
-}
-
-function Pill({ children, color = "white" }: { children: React.ReactNode, color?: "white" | "rose" | "amber" }) {
     const colors = {
         white: "border-white/10 bg-white/5 text-white/80",
         rose: "border-rose-500/20 bg-rose-500/10 text-rose-400",
@@ -142,7 +89,17 @@ function Pill({ children, color = "white" }: { children: React.ReactNode, color?
     );
 }
 
-function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+function Modal({
+    isOpen,
+    onClose,
+    title,
+    children,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    title: string;
+    children: React.ReactNode;
+}) {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -163,9 +120,7 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
                         <X className="h-5 w-5 text-white/60" />
                     </button>
                 </div>
-                <div className="max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
-                    {children}
-                </div>
+                <div className="max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">{children}</div>
             </motion.div>
         </div>
     );
@@ -197,12 +152,14 @@ function FancyButton({
 
 // ------------------ main page ------------------
 export default function AppDashboard() {
-    const { token, user: authUser, logout, loading: authLoading } = useAuth();
+    const { token, logout, loading: authLoading } = useAuth();
     const router = useRouter();
 
     const [file, setFile] = useState<File | null>(null);
     const [busy, setBusy] = useState(false);
-    const [status, setStatus] = useState<"Idle" | "Presigning" | "Uploading" | "Creating" | "Queued" | "Processing" | "Complete" | "Error">("Idle");
+    const [status, setStatus] = useState<
+        "Idle" | "Presigning" | "Uploading" | "Creating" | "Queued" | "Processing" | "Complete" | "Error"
+    >("Idle");
     const [jobId, setJobId] = useState<string | null>(null);
     const [reportId, setReportId] = useState<string | null>(null);
     const [result, setResult] = useState<any | null>(null);
@@ -212,14 +169,15 @@ export default function AppDashboard() {
     const [activeModal, setActiveModal] = useState<"utilization" | "negatives" | "inquiries" | null>(null);
 
     useEffect(() => {
-        if (!authLoading && !token) {
-            router.push("/login");
-        }
+        if (!authLoading && !token) router.push("/login");
     }, [token, authLoading, router]);
 
-    const headers = useMemo(() => ({
-        "Authorization": `Bearer ${token}`
-    }), [token]);
+    const headers = useMemo(
+        () => ({
+            Authorization: `Bearer ${token}`,
+        }),
+        [token]
+    );
 
     if (authLoading || !token) {
         return (
@@ -239,51 +197,58 @@ export default function AppDashboard() {
         []
     );
 
+    // ---- Derived fields from result JSON ----
     const score = result?.score?.value ?? null;
     const rating = result?.score?.rating ?? null;
     const provider = result?.meta?.bureau ?? null;
     const reportDate = result?.meta?.generatedDate ?? null;
     const completeness = result?.quality?.completenessScore ?? null;
-    const primaryIssues = result?.impactRanking?.slice(0, 3).map((ir: any) => ir.title) ?? [];
-
-    // Adapted from impactRanking for "Score Killers" visualization
-    const scoreKillers = useMemo(() => {
-        return (result?.impactRanking || [])
-            .filter((ir: any) => ir.priority <= 3)
-            .map((ir: any) => ({
-                label: ir.title,
-                impact: ir.expectedImpact || "High"
-            }));
-    }, [result]);
 
     const impactRanking = result?.impactRanking ?? [];
-    const projectedRange = result?.nextBestMove?.expectedImpact ?? null;
-    const issues = result?.accountSummary?.collectionsCount ? (result.accountSummary.collectionsCount + (result.accountSummary.accountsEverLate || 0)) : (result?.negatives?.length ?? 0);
     const actionPlan = result?.nextBestMove ?? null;
 
-    // In the new schema, most_important_action is effectively the nextBestMove
-    const mia = result?.nextBestMove ? {
-        action: result.nextBestMove.title,
-        steps: result.nextBestMove.steps,
-        expected_boost: result.nextBestMove.expectedImpact || "Unknown",
-        timeline: result.nextBestMove.timeframe || "Unknown",
-        // The new schema doesn't have pay-specific fields in nextBestMove yet, 
-        // but we'll adapt the UI or use the steps.
-    } : null;
+    const inquiries = Array.isArray(result?.inquiries) ? result.inquiries : [];
+    const util = result?.utilization ?? {};
+    const negatives = useMemo(() => {
+        const items = Array.isArray(result?.negatives) ? result.negatives : [];
+        const severityMap: any = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+        return [...items].sort((a, b) => (severityMap[b.severity] || 0) - (severityMap[a.severity] || 0));
+    }, [result]);
+
+    const issuesCount = (result?.impactRanking?.length ?? 0) || (result?.negatives?.length ?? 0);
+    const lateCount = result?.accountSummary?.accountsEverLate ?? null;
+    const collectionsCount = result?.accountSummary?.collectionsCount ?? null;
+
+    const mia = actionPlan
+        ? {
+            action: actionPlan.title,
+            steps: actionPlan.steps,
+            expected_boost: actionPlan.expectedImpact || "Unknown",
+            timeline: actionPlan.timeframe || "Unknown",
+        }
+        : null;
 
     const nextAction = result?.nextBestMove?.title ?? "Upload a report to get your next step.";
 
-    const negatives = useMemo(() => {
-        const items = result?.negatives ?? [];
-        return [...items].sort((a, b) => {
-            const severityMap: any = { "Critical": 4, "High": 3, "Medium": 2, "Low": 1 };
-            return (severityMap[b.severity] || 0) - (severityMap[a.severity] || 0);
-        });
-    }, [result]);
+    // ---- Widget state helpers ----
+    const baseState = useMemo(() => {
+        if (busy || (status !== "Idle" && status !== "Complete" && status !== "Error")) return "loading";
+        if (err || status === "Error") return "error";
+        if (!result && status === "Idle") return "empty";
+        if ((result?.quality?.completenessScore ?? 100) < 85) return "partial";
+        return "ready";
+    }, [busy, status, err, result]);
 
-    const inquiries = result?.inquiries ?? [];
-    const util = result?.utilization ?? {};
+    const stateFor = (hasData: boolean) => {
+        if (baseState === "loading" || baseState === "error" || baseState === "empty") return baseState;
+        return hasData ? baseState : "partial";
+    };
 
+    const utilizationState = stateFor(!!util?.overall);
+    const negativesState = stateFor(Array.isArray(result?.negatives));
+    const inquiriesState = stateFor(Array.isArray(result?.inquiries));
+
+    // ------------------ API flows ------------------
     async function presignUpload(filename: string): Promise<PresignResp> {
         const r = await fetch(`${API_BASE}/uploads/presign`, {
             method: "POST",
@@ -346,7 +311,7 @@ export default function AppDashboard() {
         }
     }
 
-    async function downloadLetter(fileKey: string, bureau: string) {
+    async function downloadLetter(fileKey: string) {
         try {
             const r = await fetch(`${API_BASE}/downloads/presign`, {
                 method: "POST",
@@ -368,6 +333,7 @@ export default function AppDashboard() {
             fetchLetters(reportId);
         }
     }, [status, reportId]);
+
     async function runUploadFlow() {
         if (!file || busy) return;
         setBusy(true);
@@ -375,7 +341,7 @@ export default function AppDashboard() {
         setResult(null);
         setJobId(null);
         setReportId(null);
-        setLetters([]); // Clear letters on new upload
+        setLetters([]);
 
         try {
             setStatus("Presigning");
@@ -395,9 +361,6 @@ export default function AppDashboard() {
             setStatus("Queued");
             await pollJob(cr.job.id);
 
-            // fetchResult and fetchLetters are now called by useEffect when status becomes "Complete"
-            // const res = await fetchResult(cr.report.id); // Removed as fetchResult now sets state directly
-            // setResult(res); // Removed as fetchResult now sets state directly
             setStatus("Complete");
         } catch (e: any) {
             setErr(e?.message || "Something went wrong");
@@ -419,7 +382,7 @@ export default function AppDashboard() {
             setStatus("Queued");
             const r = await fetch(`${API_BASE}/reports/${reportId}/retry`, {
                 method: "POST",
-                headers
+                headers,
             });
             const d = await r.json();
             if (!d.ok) throw new Error(d.error);
@@ -435,22 +398,28 @@ export default function AppDashboard() {
     }
 
     const statusColor =
-        status === "Complete" ? "text-emerald-300" :
-            status === "Error" ? "text-rose-300" :
-                status === "Processing" ? "text-amber-200" :
-                    status === "Queued" ? "text-cyan-200" :
-                        "text-white/70";
+        status === "Complete"
+            ? "text-emerald-300"
+            : status === "Error"
+                ? "text-rose-300"
+                : status === "Processing"
+                    ? "text-amber-200"
+                    : status === "Queued"
+                        ? "text-cyan-200"
+                        : "text-white/70";
 
     return (
         <div className="min-h-screen bg-[#05060a] text-white">
             {/* background vibes */}
             <GradientOrb className="left-[-160px] top-[-140px] h-[520px] w-[520px]" />
             <GradientOrb className="right-[-180px] top-[140px] h-[620px] w-[620px]" />
-            <div className="pointer-events-none absolute inset-0 opacity-[0.18]" style={{
-                backgroundImage:
-                    "radial-gradient(circle at 1px 1px, rgba(255,255,255,.35) 1px, transparent 0)",
-                backgroundSize: "22px 22px",
-            }} />
+            <div
+                className="pointer-events-none absolute inset-0 opacity-[0.18]"
+                style={{
+                    backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,.35) 1px, transparent 0)",
+                    backgroundSize: "22px 22px",
+                }}
+            />
 
             {/* top bar */}
             <div className="sticky top-0 z-20 border-b border-white/10 bg-black/35 backdrop-blur-xl">
@@ -467,7 +436,9 @@ export default function AppDashboard() {
                                         <span className="text-emerald-400">●</span>
                                         {provider} Report • {reportDate}
                                     </span>
-                                ) : "Widget Dashboard"}
+                                ) : (
+                                    "Widget Dashboard"
+                                )}
                             </div>
                         </div>
                     </div>
@@ -478,13 +449,11 @@ export default function AppDashboard() {
                                 <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Completeness</div>
                                 <div className="text-xs font-black text-white/80">{completeness}%</div>
                                 <div className="h-1 w-12 bg-white/10 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-emerald-500 rounded-full transition-all"
-                                        style={{ width: `${completeness}%` }}
-                                    />
+                                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${completeness}%` }} />
                                 </div>
                             </div>
                         )}
+
                         <Pill>
                             <span className={cn("font-semibold", statusColor)}>{status}</span>
                         </Pill>
@@ -513,10 +482,7 @@ export default function AppDashboard() {
 
                         <div className="h-8 w-px bg-white/10 mx-1" />
 
-                        <button
-                            onClick={logout}
-                            className="text-white/40 hover:text-white/80 transition-colors"
-                        >
+                        <button onClick={logout} className="text-white/40 hover:text-white/80 transition-colors">
                             <span className="text-sm font-medium">Logout</span>
                         </button>
                     </div>
@@ -533,6 +499,21 @@ export default function AppDashboard() {
                         <div className="mt-1 text-white/80">{err}</div>
                     </div>
                 ) : null}
+
+                {result && status === "Complete" && (
+                    <div className="mb-6">
+                        <ReportHeader
+                            bureau={result.meta?.bureau}
+                            generatedDate={result.meta?.generatedDate}
+                            score={result.score?.value}
+                            rating={result.score?.rating}
+                            completenessScore={result.quality?.completenessScore}
+                            warningsCount={result.quality?.warnings?.length}
+                            onUploadNew={() => document.getElementById("pdf")?.click()}
+                            onRerun={runRetryFlow}
+                        />
+                    </div>
+                )}
 
                 {busy || (status !== "Idle" && status !== "Complete" && status !== "Error") ? (
                     <motion.div
@@ -562,160 +543,140 @@ export default function AppDashboard() {
                     </motion.div>
                 ) : null}
 
-                {/* GRID */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                <DashboardGrid>
                     {/* BIG SCORE */}
                     <div className="lg:col-span-8">
-                        <GlassCard
+                        <WidgetCard
                             title="Score Pulse"
-                            icon={<Activity className="h-5 w-5 text-white/90" />}
-                            accent="ice"
-                            onClick={() => {
-                                // Potentially show a score history modal in the future
-                                document.getElementById("sparkline-chart")?.scrollIntoView({ behavior: "smooth" });
-                            }}
-                            footer={
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span>Report</span>
-                                    <span className="text-white/70">{reportId ? reportId.slice(0, 8) + "…" : "—"}</span>
-                                    <span className="text-white/50">•</span>
-                                    <span>Job</span>
-                                    <span className="text-white/70">{jobId ? jobId.slice(0, 8) + "…" : "—"}</span>
+                            subtitle={result?.meta?.bureau ? `Source: ${result.meta.bureau}` : "Estimated credit health based on report data"}
+                            state={baseState}
+                            badge={rating || undefined}
+                            action={
+                                <div className="flex items-center gap-2 text-[10px] text-white/40 font-mono">
+                                    {reportId ? `REF: ${reportId.slice(0, 8)}` : ""}
                                 </div>
                             }
                         >
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                                <div>
-                                    <div className="text-6xl font-black tracking-tight">
-                                        {score ?? "—"}
-                                        <span className="ml-2 text-base font-semibold text-white/60">est.</span>
-                                        {rating && (
-                                            <span className={cn(
-                                                "ml-4 text-sm font-bold uppercase tracking-wider px-3 py-1 rounded-full",
-                                                rating === "Exceptional" || rating === "Good" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                                                    rating === "Fair" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
-                                                        "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                            )}>
-                                                {rating}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="mt-6">
-                                        <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Impact Assessment</div>
-                                        <div className="space-y-6">
-                                            {impactRanking.map((item: any, i: number) => (
-                                                <div key={i} className="space-y-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={cn(
-                                                            "text-xs font-black uppercase tracking-tighter px-2 py-0.5 rounded",
-                                                            item.severity === "Critical" ? "bg-rose-500/20 text-rose-400" :
-                                                                item.severity === "High" ? "bg-amber-500/20 text-amber-400" :
-                                                                    "bg-emerald-500/20 text-emerald-400"
-                                                        )}>
-                                                            {item.severity === "Critical" ? "🔴 CRITICAL" :
-                                                                item.severity === "High" ? "🟠 HIGH" :
-                                                                    "🟡 MEDIUM"}
-                                                        </span>
-                                                        <span className="text-sm font-bold text-white/90">{item.title}</span>
-                                                    </div>
-                                                    <div className="pl-2 space-y-1">
-                                                        <div className="flex items-center gap-2 text-xs text-white/70">
-                                                            <span className="text-emerald-400">?</span>
-                                                            {item.whyItMatters}
-                                                        </div>
-                                                        {item.evidence?.map((ev: any, j: number) => (
-                                                            <div key={j} className="flex items-center gap-2 text-[10px] text-white/30 italic">
-                                                                <span className="text-white/20">“</span>
-                                                                {ev.snippet}
-                                                                <span className="text-white/20">”</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
+                            <div className="flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-baseline gap-2">
+                                        <div className="text-7xl font-black tracking-tight text-white">{score ?? "—"}</div>
+                                        <div className="text-sm font-bold text-white/40 uppercase tracking-widest">
+                                            {score ? result?.score?.model ?? "SCORE" : "EST."}
                                         </div>
                                     </div>
 
-                                    {projectedRange && (
-                                        <div className="mt-8 rounded-2xl bg-emerald-400/5 border border-emerald-400/10 p-4 transition-all hover:bg-emerald-400/10">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest">Projected Score</div>
-                                                    <div className="text-2xl font-black text-emerald-400">{projectedRange}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest italic">If fixed</div>
-                                                    <Sparkles className="inline-block h-4 w-4 text-emerald-400 mt-1" />
-                                                </div>
-                                            </div>
+                                    <div className="mt-8">
+                                        <div className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] mb-4">
+                                            Impact Assessment
                                         </div>
-                                    )}
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        <Pill>Utilization: {util?.overall_percent ?? "—"}%</Pill>
-                                        <Pill>Issues: {issues ?? "—"}</Pill>
-                                        <Pill>Inquiries: {Array.isArray(inquiries) ? inquiries.length : 0}</Pill>
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {impactRanking.slice(0, 3).map((item: any, i: number) => {
+                                                const snippet = String(item?.evidence?.[0]?.snippet || "");
+                                                const shown = snippet.slice(0, 120);
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className="group relative overflow-hidden rounded-2xl bg-white/[0.03] border border-white/5 p-4 transition-all hover:bg-white/[0.06] hover:border-white/10"
+                                                    >
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <div
+                                                                    className={cn(
+                                                                        "h-2 w-2 rounded-full",
+                                                                        item.severity === "Critical"
+                                                                            ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"
+                                                                            : item.severity === "High"
+                                                                                ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+                                                                                : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                                                                    )}
+                                                                />
+                                                                <span className="text-xs font-black uppercase tracking-wider text-white/90">
+                                                                    {item.title}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-white/30 uppercase">
+                                                                {item.severity}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-white/60 leading-relaxed mb-3">{item.whyItMatters}</p>
+                                                        {shown ? (
+                                                            <div className="text-[10px] text-emerald-400/60 font-medium italic bg-emerald-400/5 rounded px-2 py-1 inline-block">
+                                                                Verified: “{shown}{snippet.length > 120 ? "…" : ""}”
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-8 flex flex-wrap gap-2">
+                                        <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60 uppercase tracking-wider">
+                                            Util: {util?.overall?.overallUtilizationPct ?? "—"}%
+                                        </div>
+                                        <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60 uppercase tracking-wider">
+                                            Issues: {issuesCount ?? "—"}
+                                        </div>
+                                        <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60 uppercase tracking-wider">
+                                            Late Pays: {lateCount ?? "—"}
+                                        </div>
+                                        <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60 uppercase tracking-wider">
+                                            Collections: {collectionsCount ?? "—"}
+                                        </div>
+                                        <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] font-bold text-white/60 uppercase tracking-wider">
+                                            Inquiries: {inquiries.length}
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="h-28 w-full sm:w-[320px] min-w-[240px]" id="sparkline-chart">
+                                <div className="h-32 w-full sm:w-[280px] opacity-80" id="sparkline-chart">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={spark}>
                                             <Tooltip
                                                 contentStyle={{
-                                                    background: "rgba(10,12,18,.9)",
-                                                    border: "1px solid rgba(255,255,255,.12)",
-                                                    borderRadius: 16,
+                                                    background: "rgba(10,12,18,.95)",
+                                                    border: "1px solid rgba(255,255,255,.1)",
+                                                    borderRadius: 12,
+                                                    fontSize: "10px",
                                                 }}
-                                                labelStyle={{ color: "rgba(255,255,255,.7)" }}
                                             />
                                             <defs>
-                                                <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
-                                                    <stop offset="0%" stopColor="rgba(56,189,248,.55)" />
-                                                    <stop offset="60%" stopColor="rgba(167,139,250,.25)" />
-                                                    <stop offset="100%" stopColor="rgba(244,114,182,.05)" />
+                                                <linearGradient id="scoreG" x1="0" x2="0" y1="0" y2="1">
+                                                    <stop offset="0%" stopColor="rgba(56,189,248,.3)" />
+                                                    <stop offset="100%" stopColor="rgba(56,189,248,0)" />
                                                 </linearGradient>
                                             </defs>
-                                            <Area
-                                                type="monotone"
-                                                dataKey="v"
-                                                stroke="rgba(255,255,255,.0)"
-                                                fill="url(#g)"
-                                                fillOpacity={1}
-                                            />
+                                            <Area type="monotone" dataKey="v" stroke="#38bdf8" strokeWidth={2} fill="url(#scoreG)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                        </GlassCard>
+                        </WidgetCard>
                     </div>
 
                     {/* RIGHT STACK */}
                     <div className="lg:col-span-4 flex flex-col gap-4">
-                        <GlassCard
-                            title="Issues Found"
-                            icon={<ShieldCheck className="h-5 w-5 text-white/90" />}
-                            accent="mint"
-                            onClick={() => setActiveModal("negatives")}
-                        >
-                            <div className="text-5xl font-black">{issues ?? "—"}</div>
-                            <div className="mt-2 text-sm text-white/70">
-                                Items likely impacting score (late pays, collections, utilization, etc.)
+                        <WidgetCard title="Issues Found" state={baseState} onClick={() => setActiveModal("negatives")}>
+                            <div className="text-5xl font-black text-rose-400">{issuesCount ?? "—"}</div>
+                            <div className="mt-2 text-sm text-white/50 leading-relaxed">
+                                Ranked items likely impacting your score (payment history, utilization, derogatories, inquiries).
                             </div>
-                        </GlassCard>
+                        </WidgetCard>
 
-                        <GlassCard
+                        <WidgetCard
                             title={mia ? "🔥 MOST IMPORTANT ACTION" : "Next Best Move"}
-                            icon={mia ? null : <Sparkles className="h-5 w-5 text-white/90" />}
-                            accent={mia ? "sunset" : "sunset"}
-                            onClick={() => {
-                                document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
-                            }}
+                            state={baseState}
+                            action={
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                                    <span>Plan</span>
+                                    <ChevronRight className="h-3 w-3" />
+                                </div>
+                            }
                         >
                             {mia ? (
                                 <div className="space-y-4">
-                                    <div className="text-lg font-black text-white leading-tight">
-                                        {mia.action}
-                                    </div>
+                                    <div className="text-lg font-black text-white leading-tight">{mia.action}</div>
                                     <div className="space-y-2">
                                         {mia.steps?.map((step: string, i: number) => (
                                             <div key={i} className="flex items-center gap-2 text-sm font-bold text-white/80">
@@ -723,175 +684,149 @@ export default function AppDashboard() {
                                                 {step}
                                             </div>
                                         ))}
-                                        <div className="flex items-center gap-2 text-sm text-white/60">
-                                            <span className="text-emerald-400">→</span>
-                                            Expected boost: <span className="font-bold text-emerald-400">{mia.expected_boost}</span>
+                                        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                            <div className="text-[10px] text-white/40 uppercase tracking-widest">Est. Boost</div>
+                                            <div className="text-sm font-bold text-emerald-400">{mia.expected_boost}</div>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm text-white/60">
-                                            <span className="text-emerald-400">→</span>
-                                            Timeline: {mia.timeline}
+                                        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                            <div className="text-[10px] text-white/40 uppercase tracking-widest">Timeline</div>
+                                            <div className="text-sm font-bold text-white/80">{mia.timeline}</div>
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <>
-                                    <div className="text-sm font-bold leading-6 text-white">{nextAction}</div>
-                                    {actionPlan && (
-                                        <div className="mt-2 space-y-1.5 pb-2">
-                                            {actionPlan.steps.map((step: string, i: number) => (
-                                                <div key={i} className="flex items-start gap-2 text-xs text-white/60">
-                                                    <div className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-white/40" />
-                                                    {step}
-                                                </div>
-                                            ))}
-                                            <div className="mt-3 inline-block rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
-                                                Impact: {actionPlan.expected_impact}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
+                                <div className="space-y-3">
+                                    <div className="text-sm font-bold leading-relaxed text-white/90">{nextAction}</div>
+                                    <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                                        <span>View Action Steps</span>
+                                        <ChevronRight className="h-3 w-3" />
+                                    </div>
+                                </div>
                             )}
-                            <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-white/40 uppercase tracking-wider">
-                                <span>Take Action</span>
-                                <ChevronRight className="h-3 w-3" />
-                            </div>
-                        </GlassCard>
-                    </div>
+                        </WidgetCard>
 
-                    {/* UTILIZATION */}
-                    <div className="lg:col-span-4">
-                        <GlassCard
+                        <WidgetCard
                             title="Utilization"
-                            icon={<Activity className="h-5 w-5 text-white/90" />}
-                            accent="violet"
-                            onClick={() => setActiveModal("utilization")}
+                            state={utilizationState}
+                            action={
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveModal("utilization");
+                                    }}
+                                    className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest hover:text-emerald-400 transition-colors"
+                                >
+                                    Details
+                                </button>
+                            }
                         >
                             <div className="flex items-end justify-between">
                                 <div>
                                     <div className="text-4xl font-black">
                                         {util?.overall?.overallUtilizationPct ?? "—"}%
-                                        {util?.overall?.overallUtilizationPct > 30 && <span className="ml-2 text-2xl">⚠️</span>}
-                                        {util?.overall?.overallUtilizationPct > 100 && <span className="ml-2 text-2xl">❌</span>}
+                                        {(util?.overall?.overallUtilizationPct ?? 0) > 30 ? <span className="ml-2 text-xl">⚠️</span> : null}
                                     </div>
-                                    <div className="mt-1 text-xs text-white/60">Overall revolving utilization</div>
+                                    <div className="mt-1 text-xs text-white/40">Total Revolving</div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-xs text-white/40 uppercase tracking-widest font-bold">Target</div>
-                                    <div className="text-sm text-emerald-400 font-bold">
+                                    <div className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Target</div>
+                                    <div className="text-xs text-emerald-400 font-bold">
                                         {util?.overall?.targetRangePct?.min ?? 1}–{util?.overall?.targetRangePct?.max ?? 9}%
                                     </div>
                                 </div>
                             </div>
-
-                            <div className="mt-4 space-y-2">
-                                {(util?.revolvingAccounts || []).slice(0, 3).map((a: any, idx: number) => (
-                                    <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-3">
-                                        <div className="flex items-center justify-between text-sm">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold">{a.creditor || "Card"}</span>
-                                                {a.utilizationPct > 100 ? "❌" : a.utilizationPct > 9 ? "⚠️" : ""}
-                                            </div>
-                                            <span className={cn(
-                                                "font-bold",
-                                                a.utilizationPct > 30 ? "text-rose-400" : "text-emerald-400"
-                                            )}>{a.utilizationPct ?? "—"}%</span>
-                                        </div>
-                                        <div className="mt-1 text-xs text-white/60">
-                                            Bal: {a.balance ?? "—"} • Limit: {a.limit ?? "—"}
-                                        </div>
-                                    </div>
-                                ))}
-                                {!util?.revolvingAccounts?.length ? (
-                                    <div className="text-sm text-white/70">No utilization lines parsed yet.</div>
-                                ) : null}
-                            </div>
-                        </GlassCard>
+                        </WidgetCard>
                     </div>
 
                     {/* NEGATIVES */}
                     <div className="lg:col-span-4">
-                        <GlassCard
+                        <WidgetCard
                             title="Negative Items"
-                            icon={<AlertTriangle className="h-5 w-5 text-white/90" />}
-                            accent="amber"
+                            state={negativesState}
+                            badge={negatives.length ? `${negatives.length} total` : undefined}
                             onClick={() => setActiveModal("negatives")}
                         >
-                            {Array.isArray(negatives) && negatives.length ? (
+                            {negatives.length ? (
                                 <div className="space-y-2">
-                                    {negatives.slice(0, 4).map((n: any, idx: number) => (
-                                        <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-3">
-                                            <div className="flex items-center justify-between">
-                                                <div className="text-sm font-semibold">{n.type ?? "issue"}</div>
-                                                <Pill>{n.severity || n.impact_points || "—"}</Pill>
+                                    {negatives.slice(0, 3).map((n: any, idx: number) => (
+                                        <div
+                                            key={idx}
+                                            className="rounded-xl bg-white/[0.03] border border-white/5 p-3 flex items-center justify-between group hover:bg-white/[0.05] transition-colors"
+                                        >
+                                            <div>
+                                                <div className="text-xs font-bold text-white/90">{n.creditor || "Unknown"}</div>
+                                                <div className="text-[10px] text-white/40">
+                                                    {n.category || "Issue"} • {n.lastReported || n.dateOpened || "—"}
+                                                </div>
                                             </div>
-                                            <div className="mt-1 text-xs text-white/60">
-                                                {n.creditor || "Unknown"} • {n.date || "—"}
+                                            <div
+                                                className={cn(
+                                                    "text-[10px] font-black px-1.5 py-0.5 rounded",
+                                                    n.severity === "Critical"
+                                                        ? "bg-rose-500/20 text-rose-400"
+                                                        : n.severity === "High"
+                                                            ? "bg-amber-500/20 text-amber-300"
+                                                            : "bg-emerald-500/20 text-emerald-400"
+                                                )}
+                                            >
+                                                {(n.severity ? String(n.severity).toUpperCase() : "UNKNOWN") as string}
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-sm text-white/70">No negative items found yet.</div>
+                                <p className="text-sm text-white/30 italic">No negative items found yet.</p>
                             )}
-                        </GlassCard>
+                        </WidgetCard>
                     </div>
 
                     {/* INQUIRIES */}
                     <div className="lg:col-span-4">
-                        <GlassCard
-                            title="Inquiries"
-                            icon={<FileText className="h-5 w-5 text-white/90" />}
-                            accent="ice"
+                        <WidgetCard
+                            title="Recent Inquiries"
+                            state={inquiriesState}
+                            badge={inquiries.length ? `${inquiries.length}` : undefined}
                             onClick={() => setActiveModal("inquiries")}
                         >
-                            {Array.isArray(inquiries) && inquiries.length ? (
+                            {inquiries.length ? (
                                 <div className="space-y-2">
-                                    {inquiries.slice(0, 5).map((i: any, idx: number) => (
-                                        <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-3">
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="font-semibold">{i.creditor || "Inquiry"}</span>
-                                                <span className="text-white/70">{i.bureau || "unknown"}</span>
+                                    {inquiries.slice(0, 3).map((i: any, idx: number) => (
+                                        <div key={idx} className="rounded-xl bg-white/[0.03] border border-white/5 p-3 flex items-center justify-between">
+                                            <div>
+                                                <div className="text-xs font-bold text-white/90">{i.creditor || "Inquiry"}</div>
+                                                <div className="text-[10px] text-white/40">{i.date || "—"}</div>
                                             </div>
-                                            <div className="mt-1 text-xs text-white/60">{i.date || "—"}</div>
+                                            <div className="text-[10px] font-medium text-white/30 uppercase">{i.type || "Unknown"}</div>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-sm text-white/70">No inquiries listed yet.</div>
+                                <p className="text-sm text-white/30 italic">No recent inquiries.</p>
                             )}
-                        </GlassCard>
+                        </WidgetCard>
                     </div>
 
-                    {/* LETTERS */}
+                    {/* LETTERS (now consistent with WidgetCard) */}
                     <div className="lg:col-span-12" id="letters-section">
-                        <GlassCard
+                        <WidgetCard
                             title="Dispute Letters"
-                            icon={<Sparkles className="h-5 w-5 text-white/90" />}
-                            accent="sunset"
-                            footer={
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <span>Your customized dispute artifacts are generated automatically.</span>
-                                </div>
-                            }
+                            subtitle="Generated automatically after analysis completes"
+                            state={baseState}
+                            badge={letters.length ? `${letters.length}` : undefined}
                         >
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 {letters.length ? (
                                     letters.map((l: any) => (
-                                        <div key={l.id} className="group relative overflow-hidden rounded-[24px] border border-white/10 bg-white/5 p-6 transition-all hover:bg-white/10">
-                                            <div className="relative z-10">
-                                                <div className="text-xs font-semibold uppercase tracking-widest text-white/40">{l.bureau}</div>
-                                                <div className="mt-1 text-xl font-bold">PDF Document</div>
-                                                <div className="mt-4 flex items-center gap-3">
-                                                    <button
-                                                        onClick={() => downloadLetter(l.file_key, l.bureau)}
-                                                        className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20"
-                                                    >
-                                                        <FileText className="h-4 w-4" />
-                                                        Download
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="absolute -right-4 -top-4 h-24 w-24 bg-gradient-to-br from-white/10 to-transparent blur-2xl transition-opacity group-hover:opacity-100 opacity-20" />
+                                        <div key={l.id} className="rounded-2xl border border-white/10 bg-white/5 p-5 hover:bg-white/10 transition">
+                                            <div className="text-xs font-semibold uppercase tracking-widest text-white/40">{l.bureau}</div>
+                                            <div className="mt-1 text-lg font-bold text-white/90">PDF Document</div>
+                                            <button
+                                                onClick={() => downloadLetter(l.file_key)}
+                                                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20"
+                                            >
+                                                <FileText className="h-4 w-4" />
+                                                Download
+                                            </button>
                                         </div>
                                     ))
                                 ) : (
@@ -900,9 +835,9 @@ export default function AppDashboard() {
                                     </div>
                                 )}
                             </div>
-                        </GlassCard>
+                        </WidgetCard>
                     </div>
-                </div>
+                </DashboardGrid>
 
                 {/* mobile file picker row */}
                 <div className="mt-5 sm:hidden flex items-center gap-2">
@@ -919,22 +854,20 @@ export default function AppDashboard() {
             </div>
 
             {/* MODALS */}
-            <Modal
-                isOpen={activeModal === "utilization"}
-                onClose={() => setActiveModal(null)}
-                title="Utilization Analysis"
-            >
+            <Modal isOpen={activeModal === "utilization"} onClose={() => setActiveModal(null)} title="Utilization Analysis">
                 <div className="space-y-6">
                     <div className="flex items-center justify-between rounded-3xl bg-white/5 p-6 border border-white/10">
                         <div>
                             <div className="text-sm text-white/60 mb-1">Overall Utilization</div>
-                            <div className="text-4xl font-black">{util?.overall_percent ?? "—"}%</div>
+                            <div className="text-4xl font-black">{util?.overall?.overallUtilizationPct ?? "—"}%</div>
                         </div>
                         <div className="text-right">
-                            <Pill color={util?.overall_percent > 30 ? "rose" : "amber"}>
-                                {util?.overall_percent > 30 ? "High Impact" : "Fair"}
+                            <Pill color={(util?.overall?.overallUtilizationPct ?? 0) > 30 ? "rose" : "amber"}>
+                                {(util?.overall?.overallUtilizationPct ?? 0) > 30 ? "High Impact" : "Fair"}
                             </Pill>
-                            <div className="mt-2 text-xs text-white/50">Target: 1–9%</div>
+                            <div className="mt-2 text-xs text-white/50">
+                                Target: {util?.overall?.targetRangePct?.min ?? 1}–{util?.overall?.targetRangePct?.max ?? 9}%
+                            </div>
                         </div>
                     </div>
 
@@ -942,27 +875,27 @@ export default function AppDashboard() {
                         <h3 className="text-sm font-bold text-white/80 mb-3 px-1 uppercase tracking-wider">Account Breakdown</h3>
                         <div className="space-y-3">
                             {(util?.revolvingAccounts || []).map((a: any, idx: number) => (
-                                <div key={idx} className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 p-4 transition-colors hover:bg-white/10">
+                                <div
+                                    key={idx}
+                                    className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 p-4 transition-colors hover:bg-white/10"
+                                >
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <div className="font-bold text-white">{a.creditor || "Revolving Account"}</div>
                                             {a.utilizationPct > 100 ? "❌" : a.utilizationPct > 9 ? "⚠️" : ""}
                                         </div>
                                         <div className="text-xs text-white/50">
-                                            Balance: <span className="text-white/80">{a.balance}</span> • Limit: <span className="text-white/80">{a.limit}</span>
+                                            Balance: <span className="text-white/80">{a.balance ?? "—"}</span> • Limit:{" "}
+                                            <span className="text-white/80">{a.limit ?? "—"}</span>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className={cn(
-                                            "text-lg font-black",
-                                            a.utilizationPct > 30 ? "text-rose-400" : "text-emerald-400"
-                                        )}>{a.utilizationPct}%</div>
+                                        <div className={cn("text-lg font-black", (a.utilizationPct ?? 0) > 30 ? "text-rose-400" : "text-emerald-400")}>
+                                            {a.utilizationPct ?? "—"}%
+                                        </div>
                                         <div className="h-1.5 w-24 bg-white/10 rounded-full mt-1 overflow-hidden">
                                             <div
-                                                className={cn(
-                                                    "h-full rounded-full transition-all",
-                                                    a.utilizationPct > 30 ? "bg-rose-400" : "bg-emerald-400"
-                                                )}
+                                                className={cn("h-full rounded-full transition-all", (a.utilizationPct ?? 0) > 30 ? "bg-rose-400" : "bg-emerald-400")}
                                                 style={{ width: `${Math.min(a.utilizationPct || 0, 100)}%` }}
                                             />
                                         </div>
@@ -974,79 +907,80 @@ export default function AppDashboard() {
                 </div>
             </Modal>
 
-            <Modal
-                isOpen={activeModal === "negatives"}
-                onClose={() => setActiveModal(null)}
-                title="Negative Impact Items"
-            >
+            <Modal isOpen={activeModal === "negatives"} onClose={() => setActiveModal(null)} title="Negative Impact Items">
                 <div className="space-y-4">
                     <p className="text-sm text-white/60 px-1 italic">The following items are causing the most significant drag on your score.</p>
                     <div className="space-y-3">
-                        {(negatives || []).map((n: any, idx: number) => (
-                            <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-5 group transition-all hover:bg-white/10">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <div className="text-lg font-bold text-white">{n.type}</div>
-                                        <div className="text-sm text-white/60 mt-1">{n.creditor} • {n.date}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <Pill color={n.priority_scoring?.total_priority > 50 ? "rose" : "amber"}>
-                                            Priority: {n.priority_scoring?.total_priority?.toFixed(0) || n.impact_points || "—"}
-                                        </Pill>
-                                        <div className="mt-1 text-[10px] text-white/40 uppercase tracking-tighter">
-                                            {n.priority_scoring?.impact_weight}w • {n.priority_scoring?.severity_score}s • {n.priority_scoring?.recency_score}r
+                        {(negatives || []).map((n: any, idx: number) => {
+                            const snippet = String(n?.evidence?.[0]?.snippet || "");
+                            const shown = snippet.slice(0, 160);
+                            return (
+                                <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-5 group transition-all hover:bg-white/10">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <div className="text-lg font-bold text-white">{n.category || "Negative Item"}</div>
+                                            <div className="text-sm text-white/60 mt-1">
+                                                {n.creditor || "Unknown"} • {n.lastReported || n.dateOpened || "—"}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <Pill color={n.severity === "Critical" || n.severity === "High" ? "rose" : "amber"}>
+                                                {n.severity || "Unknown"} • {(n.confidence ?? 0).toFixed(2)}
+                                            </Pill>
                                         </div>
                                     </div>
+
+                                    {shown ? (
+                                        <div className="mt-3 text-xs text-white/60 rounded-xl bg-white/5 border border-white/10 p-3">
+                                            <div className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Evidence</div>
+                                            <div className="leading-relaxed">“{shown}{snippet.length > 160 ? "…" : ""}”</div>
+                                        </div>
+                                    ) : null}
+
+                                    <div className="mt-4 flex items-center gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setActiveModal(null);
+                                                document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
+                                            }}
+                                            className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20 transition-all"
+                                        >
+                                            <ShieldCheck className="h-3 w-3" />
+                                            Dispute Strategy
+                                        </button>
+                                        <button className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white/60 hover:text-white hover:bg-white/5 transition-all">
+                                            View Details
+                                            <ExternalLink className="h-3 w-3" />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="mt-4 flex items-center gap-3">
-                                    <button
-                                        onClick={() => {
-                                            setActiveModal(null);
-                                            document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
-                                        }}
-                                        className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20 transition-all"
-                                    >
-                                        <ShieldCheck className="h-3 w-3" />
-                                        Dispute Strategy
-                                    </button>
-                                    <button
-                                        className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white/60 hover:text-white hover:bg-white/5 transition-all"
-                                    >
-                                        View Details
-                                        <ExternalLink className="h-3 w-3" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </Modal>
 
-            <Modal
-                isOpen={activeModal === "inquiries"}
-                onClose={() => setActiveModal(null)}
-                title="Credit Inquiries"
-            >
+            <Modal isOpen={activeModal === "inquiries"} onClose={() => setActiveModal(null)} title="Credit Inquiries">
                 <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                            <div className="text-2xl font-black text-white">{inquiries?.length || 0}</div>
+                            <div className="text-2xl font-black text-white">{inquiries.length}</div>
                             <div className="text-xs text-white/50 uppercase tracking-widest mt-1">Total inquiries</div>
                         </div>
                         <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                            <div className="text-2xl font-black text-emerald-400">Low</div>
+                            <div className="text-2xl font-black text-emerald-400">{inquiries.length > 3 ? "Med" : "Low"}</div>
                             <div className="text-xs text-white/50 uppercase tracking-widest mt-1">Impact level</div>
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        {(inquiries || []).map((i: any, idx: number) => (
+                        {inquiries.map((i: any, idx: number) => (
                             <div key={idx} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 p-4">
                                 <div>
-                                    <div className="font-bold text-white">{i.creditor}</div>
-                                    <div className="text-xs text-white/50">{i.date}</div>
+                                    <div className="font-bold text-white">{i.creditor || "Inquiry"}</div>
+                                    <div className="text-xs text-white/50">{i.date || "—"}</div>
                                 </div>
-                                <Pill>{i.bureau}</Pill>
+                                <Pill>{i.type || "Unknown"}</Pill>
                             </div>
                         ))}
                     </div>
