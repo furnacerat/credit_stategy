@@ -1,5 +1,10 @@
 import { openai } from "./openaiClient.js";
 
+export type Evidence = {
+    text: string;
+    page_number?: number;
+};
+
 export type CreditAnalysis = {
     summary: {
         score: number;
@@ -13,6 +18,7 @@ export type CreditAnalysis = {
         provider?: string; // e.g. "Experian"
         report_date?: string; // e.g. "Feb 2, 2026"
         completeness_percentage: number; // 0-100
+        evidence?: Evidence;
     };
     impact_ranking: Array<{
         issue: string;
@@ -21,6 +27,7 @@ export type CreditAnalysis = {
         severity: "CRITICAL" | "HIGH" | "MEDIUM";
         details: string[]; // e.g. ["Affects 35% of score", "Last late: Dec 2025"]
         why: string;
+        evidence?: Evidence;
     }>;
     score_estimate: number;
     issues_count: number;
@@ -31,7 +38,9 @@ export type CreditAnalysis = {
             balance: string;
             limit: string;
             utilization_percent: number;
+            evidence?: Evidence;
         }>;
+        evidence?: Evidence;
     };
     negatives?: Array<{
         type: string;
@@ -46,11 +55,13 @@ export type CreditAnalysis = {
             confidence_score: number; // 0.0-1.0
             total_priority: number;  // Result of impactWeight × severity × recency × confidence
         }
+        evidence?: Evidence;
     }>;
     inquiries?: Array<{
         creditor: string;
         date: string;
         bureau: string;
+        evidence?: Evidence;
     }>;
     next_best_action: string;
     action_plan?: {
@@ -65,8 +76,22 @@ export type CreditAnalysis = {
         expected_boost: string;
         timeline: string;
     };
+    quality: {
+        missing_fields: string[];
+        warnings: string[];
+    };
     key_findings?: string[];
 };
+
+const evidenceSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        text: { type: "string" },
+        page_number: { type: "integer" }
+    },
+    required: ["text"]
+} as const;
 
 const schema = {
     type: "object",
@@ -97,7 +122,8 @@ const schema = {
                 projected_score_range: { type: "string" },
                 provider: { type: "string" },
                 report_date: { type: "string" },
-                completeness_percentage: { type: "integer" }
+                completeness_percentage: { type: "integer" },
+                evidence: evidenceSchema
             },
             required: ["score", "rating", "primary_issues", "top_score_killers", "projected_score_range", "completeness_percentage"]
         },
@@ -115,7 +141,8 @@ const schema = {
                         type: "array",
                         items: { type: "string" }
                     },
-                    why: { type: "string" }
+                    why: { type: "string" },
+                    evidence: evidenceSchema
                 },
                 required: ["issue", "priority", "impact_score", "severity", "details", "why"]
             }
@@ -136,11 +163,13 @@ const schema = {
                             creditor: { type: "string" },
                             balance: { type: "string" },
                             limit: { type: "string" },
-                            utilization_percent: { type: "integer" }
+                            utilization_percent: { type: "integer" },
+                            evidence: evidenceSchema
                         },
                         required: ["creditor", "balance", "limit", "utilization_percent"]
                     }
-                }
+                },
+                evidence: evidenceSchema
             },
             required: ["overall_percent", "revolving_accounts"]
         },
@@ -166,7 +195,8 @@ const schema = {
                             total_priority: { type: "number" }
                         },
                         required: ["impact_weight", "severity_score", "recency_score", "confidence_score", "total_priority"]
-                    }
+                    },
+                    evidence: evidenceSchema
                 },
                 required: ["type", "creditor", "date", "severity", "impact_points", "priority_scoring"]
             }
@@ -179,7 +209,8 @@ const schema = {
                 properties: {
                     creditor: { type: "string" },
                     date: { type: "string" },
-                    bureau: { type: "string" }
+                    bureau: { type: "string" },
+                    evidence: evidenceSchema
                 },
                 required: ["creditor", "date", "bureau"]
             }
@@ -210,12 +241,27 @@ const schema = {
             },
             required: ["action", "expected_boost", "timeline"]
         },
+        quality: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                missing_fields: {
+                    type: "array",
+                    items: { type: "string" }
+                },
+                warnings: {
+                    type: "array",
+                    items: { type: "string" }
+                }
+            },
+            required: ["missing_fields", "warnings"]
+        },
         key_findings: {
             type: "array",
             items: { type: "string" }
         }
     },
-    required: ["summary", "impact_ranking", "score_estimate", "issues_count", "next_best_action", "action_plan"]
+    required: ["summary", "impact_ranking", "score_estimate", "issues_count", "next_best_action", "action_plan", "quality"]
 } as const;
 
 export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis> {
@@ -225,35 +271,37 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
         {
             role: "system" as const,
             content:
-                `You extract structured credit-report facts from text. 
+                `You are Credit Strategy AI’s Report Extraction Engine.
+
+                Your job: extract structured credit metrics from raw credit report text and return VALID JSON ONLY that matches the provided schema.
+
+                Rules:
+                - Output MUST be JSON only. No markdown, no commentary.
+                - Do NOT guess. If a value is not present, use null and add an item to quality.missing_fields.
+                - Every metric shown to the user MUST include evidence: a short snippet from the source text and an optional page_number if available.
+                - Prefer numbers over adjectives. Convert $ and % to numeric values.
+                - If you see contradictory values, choose the value that appears in the “At a glance” or “Account summary” area and record a warning in quality.warnings.
+                - Never output >100% utilization.
+                - Do not include PII (full SSN, full account numbers, DOB, full address). Redact with "***" if it appears in evidence snippets.
+                - Compute derived fields when inputs exist (e.g., overallUtilizationPct = creditUsed / creditLimit * 100).
                 
+                Scoring Logic:
                 For each negative item, calculate a priority_scoring object using this formula: 
                 priorityScore = impact_weight (1-10) × severity_score (1-10) × recency_score (1-10) × confidence_score (0.0-1.0).
-                
                 - impact_weight: How much this type of item usually affects a score (e.g., Bankruptcy=10, Late Pay=5).
                 - severity_score: How bad this specific instance is (e.g., 90 days late=9, 30 days=3).
                 - recency_score: Higher if the item is recent (e.g., last 6 months=10, 5 years ago=2).
                 - confidence_score: Your level of certainty about the data extraction (0.0 to 1.0).
                 
-                Also provide a high-level 'summary' with:
-                - 'rating' (Very Poor, Poor, Fair, Good, Exceptional)
-                - 'primary_issues': 3-4 bullet points.
-                - 'top_score_killers': Rank the 3 most statistically damaging factors including counts/details (e.g., 'Late Payments' with '19 instances').
-                - 'projected_score_range': Estimate a score range (e.g. '620-660') if all major issues are resolved.
-                - 'provider': Identify the bureau (Experian, Equifax, TransUnion, or Generic).
-                - 'report_date': The date the report was generated.
-                - 'completeness_percentage': A score from 0-100 based on how much data was successfully parsed (e.g., if utilization, inquiries, and negatives are all present and detailed, score is high).
-                
-                Categorize the 'impact_ranking' issues by 'severity' (CRITICAL, HIGH, MEDIUM).
-                For each, provide 1-2 'details' bullets (e.g., 'Affects 35% of score', 'Last late: Dec 2025').
-                Rank the top 2-3 most impactful issues in 'impact_ranking'.
-                Generate a concrete 'action_plan' with high-level 'steps' and an 'expected_impact' (e.g., "+20 to +40 points").
-                
-                Identify the SINGLE most urgent task as 'most_important_action'. 
-                Be hyper-specific: if it is utilization, calculate the exact dollar 'payment_amount' needed to reach a 'target_utilization' (e.g. 30%).
-                Provide an 'expected_boost' and a 'timeline'.
-                
-                If a field is not present, use null/empty. Do not invent account numbers; if available, only include last4.`,
+                Categorization:
+                - Categorize 'impact_ranking' issues by 'severity' (CRITICAL, HIGH, MEDIUM).
+                - Provide 1-2 'details' bullets per impact item.
+                - Provide a ranked “impact_ranking” list with priority 1..N (1 is highest priority) based on severity, recency, and known scoring impact (payment history > utilization > derogatories > inquiries > age/mix).
+
+                Summary & Actions:
+                - Identify the bureau (Experian, Equifax, TransUnion, or Generic) and report date.
+                - Calculate completeness_percentage based on data density.
+                - Identify the SINGLE most urgent task as 'most_important_action'. Be specific with dollar amounts if possible.`,
         },
         {
             role: "user" as const,
