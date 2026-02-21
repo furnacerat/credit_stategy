@@ -714,11 +714,16 @@ export default function AppDashboard() {
                         >
                             <div className="flex items-end justify-between">
                                 <div>
-                                    <div className="text-4xl font-black">{util?.overall_percent ?? "—"}%</div>
+                                    <div className="text-4xl font-black">
+                                        {util?.overall_percent ?? "—"}%
+                                        {util?.overall_percent > 30 && <span className="ml-2 text-2xl">⚠️</span>}
+                                        {util?.overall_percent > 100 && <span className="ml-2 text-2xl">❌</span>}
+                                    </div>
                                     <div className="mt-1 text-xs text-white/60">Overall revolving utilization</div>
                                 </div>
-                                <div className="text-xs text-white/60">
-                                    Target: <span className="text-white/85 font-semibold">1–9%</span>
+                                <div className="text-right">
+                                    <div className="text-xs text-white/40 uppercase tracking-widest font-bold">Target</div>
+                                    <div className="text-sm text-emerald-400 font-bold">1–9%</div>
                                 </div>
                             </div>
 
@@ -726,8 +731,14 @@ export default function AppDashboard() {
                                 {(util?.revolving_accounts || []).slice(0, 3).map((a: any, idx: number) => (
                                     <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-3">
                                         <div className="flex items-center justify-between text-sm">
-                                            <span className="font-semibold">{a.creditor || "Card"}</span>
-                                            <span className="text-white/70">{a.utilization_percent ?? "—"}%</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold">{a.creditor || "Card"}</span>
+                                                {a.utilization_percent > 100 ? "❌" : a.utilization_percent > 9 ? "⚠️" : ""}
+                                            </div>
+                                            <span className={cn(
+                                                "font-bold",
+                                                a.utilization_percent > 30 ? "text-rose-400" : "text-emerald-400"
+                                            )}>{a.utilization_percent ?? "—"}%</span>
                                         </div>
                                         <div className="mt-1 text-xs text-white/60">
                                             Bal: {a.balance ?? "—"} • Limit: {a.limit ?? "—"}
@@ -877,13 +888,19 @@ export default function AppDashboard() {
                             {(util?.revolving_accounts || []).map((a: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 p-4 transition-colors hover:bg-white/10">
                                     <div>
-                                        <div className="font-bold text-white">{a.creditor || "Revolving Account"}</div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="font-bold text-white">{a.creditor || "Revolving Account"}</div>
+                                            {a.utilization_percent > 100 ? "❌" : a.utilization_percent > 9 ? "⚠️" : ""}
+                                        </div>
                                         <div className="text-xs text-white/50">
                                             Balance: <span className="text-white/80">{a.balance}</span> • Limit: <span className="text-white/80">{a.limit}</span>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="text-lg font-black text-white">{a.utilization_percent}%</div>
+                                        <div className={cn(
+                                            "text-lg font-black",
+                                            a.utilization_percent > 30 ? "text-rose-400" : "text-emerald-400"
+                                        )}>{a.utilization_percent}%</div>
                                         <div className="h-1.5 w-24 bg-white/10 rounded-full mt-1 overflow-hidden">
                                             <div
                                                 className={cn(
