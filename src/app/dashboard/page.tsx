@@ -242,7 +242,10 @@ export default function AppDashboard() {
     const score = result?.summary?.score_estimate ?? result?.score_estimate ?? null;
     const issues = result?.summary?.issues_count ?? result?.issues_count ?? null;
     const nextAction = result?.summary?.key_findings?.[0] ?? result?.next_best_action ?? "Upload a report to get your next step.";
-    const negatives = result?.negatives ?? result?.top_issues ?? [];
+    const negatives = useMemo(() => {
+        const items = result?.negatives ?? result?.top_issues ?? [];
+        return [...items].sort((a, b) => (b.priority_scoring?.total_priority || 0) - (a.priority_scoring?.total_priority || 0));
+    }, [result]);
     const inquiries = result?.inquiries ?? [];
     const util = result?.utilization ?? {};
 
@@ -817,9 +820,14 @@ export default function AppDashboard() {
                                         <div className="text-lg font-bold text-white">{n.type}</div>
                                         <div className="text-sm text-white/60 mt-1">{n.creditor} • {n.date}</div>
                                     </div>
-                                    <Pill color={n.impact_points > 50 ? "rose" : "amber"}>
-                                        -{n.impact_points} pts
-                                    </Pill>
+                                    <div className="text-right">
+                                        <Pill color={n.priority_scoring?.total_priority > 50 ? "rose" : "amber"}>
+                                            Priority: {n.priority_scoring?.total_priority?.toFixed(0) || n.impact_points || "—"}
+                                        </Pill>
+                                        <div className="mt-1 text-[10px] text-white/40 uppercase tracking-tighter">
+                                            {n.priority_scoring?.impact_weight}w • {n.priority_scoring?.severity_score}s • {n.priority_scoring?.recency_score}r
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="mt-4 flex items-center gap-3">
                                     <button
