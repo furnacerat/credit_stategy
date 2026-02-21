@@ -373,7 +373,7 @@ export default function AppDashboard() {
                                     </div>
                                 </div>
 
-                                <div className="h-28 w-full sm:w-[320px]">
+                                <div className="h-28 w-full sm:w-[320px] min-w-[240px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={spark}>
                                             <Tooltip
