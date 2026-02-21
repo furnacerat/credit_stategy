@@ -477,6 +477,34 @@ export default function AppDashboard() {
                     </div>
                 ) : null}
 
+                {busy || (status !== "Idle" && status !== "Complete" && status !== "Error") ? (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6 flex items-center justify-between rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+                                <Activity className="h-5 w-5 animate-pulse text-emerald-400" />
+                            </div>
+                            <div>
+                                <div className="text-sm font-bold text-white">Analysis in Progress</div>
+                                <div className="text-xs text-white/50">{status}...</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1 pr-2">
+                            {[0, 1, 2].map((i) => (
+                                <motion.div
+                                    key={i}
+                                    animate={{ opacity: [0.2, 1, 0.2] }}
+                                    transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.2 }}
+                                    className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                                />
+                            ))}
+                        </div>
+                    </motion.div>
+                ) : null}
+
                 {/* GRID */}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
                     {/* BIG SCORE */}
