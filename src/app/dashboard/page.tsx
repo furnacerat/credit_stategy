@@ -243,6 +243,7 @@ export default function AppDashboard() {
     const rating = result?.summary?.rating ?? null;
     const primaryIssues = result?.summary?.primary_issues ?? [];
     const scoreKillers = result?.summary?.top_score_killers ?? [];
+    const impactRanking = result?.impact_ranking ?? [];
     const projectedRange = result?.summary?.projected_score_range ?? null;
     const issues = result?.summary?.issues_count ?? result?.issues_count ?? null;
     const actionPlan = result?.action_plan ?? null;
@@ -553,17 +554,31 @@ export default function AppDashboard() {
                                         )}
                                     </div>
                                     <div className="mt-6">
-                                        <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Top 3 Score Killers</div>
-                                        <div className="space-y-4">
-                                            {scoreKillers.map((killer: any, i: number) => (
-                                                <div key={i} className="flex items-center justify-between group">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white/40 group-hover:text-white/80 transition-colors">
-                                                            {i + 1}
-                                                        </div>
-                                                        <span className="text-sm font-medium text-white/70">{killer.label}</span>
+                                        <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Impact Assessment</div>
+                                        <div className="space-y-6">
+                                            {impactRanking.map((item: any, i: number) => (
+                                                <div key={i} className="space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={cn(
+                                                            "text-xs font-black uppercase tracking-tighter px-2 py-0.5 rounded",
+                                                            item.severity === "CRITICAL" ? "bg-rose-500/20 text-rose-400" :
+                                                                item.severity === "HIGH" ? "bg-amber-500/20 text-amber-400" :
+                                                                    "bg-emerald-500/20 text-emerald-400"
+                                                        )}>
+                                                            {item.severity === "CRITICAL" ? "🔴 CRITICAL" :
+                                                                item.severity === "HIGH" ? "🟠 HIGH" :
+                                                                    "🟡 MEDIUM"}
+                                                        </span>
+                                                        <span className="text-sm font-bold text-white/90">{item.issue}</span>
                                                     </div>
-                                                    <span className="text-sm font-bold text-rose-400">{killer.impact}</span>
+                                                    <div className="pl-2 space-y-1">
+                                                        {item.details.map((detail: string, j: number) => (
+                                                            <div key={j} className="flex items-center gap-2 text-xs text-white/50">
+                                                                <span className="text-white/30 text-[10px]">→</span>
+                                                                {detail}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>

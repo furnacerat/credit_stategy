@@ -15,6 +15,8 @@ export type CreditAnalysis = {
         issue: string;
         priority: number;
         impact_score: number;
+        severity: "CRITICAL" | "HIGH" | "MEDIUM";
+        details: string[]; // e.g. ["Affects 35% of score", "Last late: Dec 2025"]
         why: string;
     }>;
     score_estimate: number;
@@ -102,9 +104,14 @@ const schema = {
                     issue: { type: "string" },
                     priority: { type: "integer" },
                     impact_score: { type: "integer" },
+                    severity: { enum: ["CRITICAL", "HIGH", "MEDIUM"] },
+                    details: {
+                        type: "array",
+                        items: { type: "string" }
+                    },
                     why: { type: "string" }
                 },
-                required: ["issue", "priority", "impact_score", "why"]
+                required: ["issue", "priority", "impact_score", "severity", "details", "why"]
             }
         },
         score_estimate: { type: "integer" },
@@ -227,6 +234,9 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
                 - 'primary_issues': 3-4 bullet points.
                 - 'top_score_killers': Rank the 3 most statistically damaging factors including counts/details (e.g., 'Late Payments' with '19 instances').
                 - 'projected_score_range': Estimate a score range (e.g. '620-660') if all major issues are resolved.
+                
+                Categorize the 'impact_ranking' issues by 'severity' (CRITICAL, HIGH, MEDIUM).
+                For each, provide 1-2 'details' bullets (e.g., 'Affects 35% of score', 'Last late: Dec 2025').
                 Rank the top 2-3 most impactful issues in 'impact_ranking'.
                 Generate a concrete 'action_plan' with high-level 'steps' and an 'expected_impact' (e.g., "+20 to +40 points").
                 
