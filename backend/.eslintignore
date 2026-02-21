@@ -1,0 +1,3 @@
+dist/
+src/*.d.ts
+node_modules/

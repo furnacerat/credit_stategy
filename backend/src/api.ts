@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import type { Request, Response, NextFunction } from "express";
+
 import { z } from "zod";
 import crypto from "crypto";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
@@ -8,6 +8,12 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pool } from "./db.js";
 import { SQL } from "./schema.js";
 import { r2, R2_BUCKET } from "./r2.js";
+import { authMiddleware } from "./authMiddleware.js";
+import type { AuthRequest } from "./authMiddleware.js";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_one_two_three';
 
 const app = express();
 
@@ -49,22 +55,86 @@ app.get("/health", (_req, res) => {
 });
 
 
-app.post("/admin/migrate", async (_req, res) => {
+// Migration endpoint (updated to handle table resets if needed)
+app.post("/admin/migrate", async (req, res) => {
+  const reset = req.query.reset === 'true';
   try {
     await pool.query("create extension if not exists pgcrypto;");
+    if (reset) {
+      console.log("[ADMIN] Resetting tables...");
+      await pool.query("drop table if exists analysis_results cascade;");
+      await pool.query("drop table if exists dispute_letters cascade;");
+      await pool.query("drop table if exists jobs cascade;");
+      await pool.query("drop table if exists reports cascade;");
+      await pool.query("drop table if exists users cascade;");
+    }
     await pool.query(SQL);
-    res.json({ ok: true });
+    res.json({ ok: true, reset });
   } catch (e: unknown) {
     res.status(500).json({ ok: false, error: (e as Error)?.message ?? "migrate_error" });
   }
 });
 
-// For now, user_id is passed in header (later replace with real auth/JWT)
-function getUserId(req: express.Request) {
-  return req.header("x-user-id") || "demo_user";
+// ---------- AUTH ENDPOINTS ----------
+
+app.post("/auth/register", async (req, res) => {
+  const bodySchema = z.object({
+    email: z.string().email(),
+    password: z.string().min(8),
+  });
+
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+
+  const { email, password } = parsed.data;
+  const hash = await bcrypt.hash(password, 10);
+
+  try {
+    const result = await pool.query(
+      "insert into users (email, password_hash) values ($1, $2) returning id, email, created_at",
+      [email, hash]
+    );
+    const user = result.rows[0];
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({ ok: true, user, token });
+  } catch (e: unknown) {
+    const msg = (e as any)?.code === '23505' ? 'email_exists' : 'register_error';
+    res.status(400).json({ ok: false, error: msg });
+  }
+});
+
+app.post("/auth/login", async (req, res) => {
+  const bodySchema = z.object({
+    email: z.string().email(),
+    password: z.string(),
+  });
+
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+
+  const { email, password } = parsed.data;
+
+  try {
+    const result = await pool.query("select * from users where email = $1", [email]);
+    const user = result.rows[0];
+
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ ok: false, error: "invalid_credentials" });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ ok: true, user: { id: user.id, email: user.email }, token });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: "login_error" });
+  }
+});
+
+function getUserId(req: AuthRequest) {
+  return req.user?.id || "demo_user";
 }
 
-app.post("/uploads/presign", async (req, res) => {
+app.post("/uploads/presign", authMiddleware, async (req: AuthRequest, res) => {
   console.log("PRESIGN HIT", new Date().toISOString());
   const bodySchema = z.object({
     filename: z.string().min(1),
@@ -102,7 +172,7 @@ app.post("/uploads/presign", async (req, res) => {
   }
 });
 
-app.post("/downloads/presign", async (req, res) => {
+app.post("/downloads/presign", authMiddleware, async (req: AuthRequest, res) => {
   const bodySchema = z.object({
     file_key: z.string().min(1),
   });
@@ -131,7 +201,7 @@ app.post("/downloads/presign", async (req, res) => {
   }
 });
 
-app.post("/reports", async (req, res) => {
+app.post("/reports", authMiddleware, async (req: AuthRequest, res) => {
   const bodySchema = z.object({
     filename: z.string().min(1),
     file_key: z.string().min(1), // this will be your R2 object key
@@ -163,7 +233,7 @@ app.post("/reports", async (req, res) => {
   }
 });
 
-app.get("/jobs/:id", async (req, res) => {
+app.get("/jobs/:id", authMiddleware, async (req: AuthRequest, res) => {
   const userId = getUserId(req);
 
   try {
@@ -181,7 +251,7 @@ app.get("/jobs/:id", async (req, res) => {
   }
 });
 
-app.get("/reports/:reportId/result", async (req, res) => {
+app.get("/reports/:reportId/result", authMiddleware, async (req: AuthRequest, res) => {
   const userId = getUserId(req);
 
   try {
@@ -193,6 +263,56 @@ app.get("/reports/:reportId/result", async (req, res) => {
     res.json({ ok: true, result: r.rows[0] });
   } catch (e: unknown) {
     res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
+  }
+});
+
+app.get("/reports/:reportId/letters", authMiddleware, async (req: AuthRequest, res) => {
+  const userId = getUserId(req);
+
+  try {
+    const r = await pool.query(
+      `select id, bureau, file_key, created_at from dispute_letters where report_id=$1 and user_id=$2`,
+      [req.params.reportId, userId]
+    );
+    res.json({ ok: true, letters: r.rows });
+  } catch (e: unknown) {
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "db_error" });
+  }
+});
+
+app.post("/reports/:reportId/retry", authMiddleware, async (req: AuthRequest, res) => {
+  const userId = getUserId(req);
+  const reportId = req.params.reportId;
+
+  try {
+    await pool.query("begin");
+
+    // 1) Verify report belongs to user
+    const rep = await pool.query(`select id from reports where id=$1 and user_id=$2`, [reportId, userId]);
+    if (!rep.rowCount) {
+      await pool.query("rollback");
+      return res.status(404).json({ ok: false, error: "report_not_found" });
+    }
+
+    // 2) Delete existing job & results for a fresh start
+    // Note: This is an aggressive reset. 
+    await pool.query(`delete from jobs where report_id=$1`, [reportId]);
+    await pool.query(`delete from analysis_results where report_id=$1`, [reportId]);
+    await pool.query(`delete from dispute_letters where report_id=$1`, [reportId]);
+
+    // 3) Create new job
+    const jobRes = await pool.query(
+      `insert into jobs (report_id, user_id, status, progress) 
+       values ($1, $2, 'queued', 'Queued') 
+       returning id`,
+      [reportId, userId]
+    );
+
+    await pool.query("commit");
+    res.json({ ok: true, job: jobRes.rows[0] });
+  } catch (e: unknown) {
+    await pool.query("rollback");
+    res.status(500).json({ ok: false, error: (e as Error)?.message ?? "retry_failed" });
   }
 });
 

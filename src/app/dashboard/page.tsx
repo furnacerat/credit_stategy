@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
     AreaChart,
@@ -153,16 +155,35 @@ function FancyButton({
 
 // ------------------ main page ------------------
 export default function AppDashboard() {
+    const { token, user: authUser, logout, loading: authLoading } = useAuth();
+    const router = useRouter();
+
     const [file, setFile] = useState<File | null>(null);
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<"Idle" | "Presigning" | "Uploading" | "Creating" | "Queued" | "Processing" | "Complete" | "Error">("Idle");
     const [jobId, setJobId] = useState<string | null>(null);
     const [reportId, setReportId] = useState<string | null>(null);
     const [result, setResult] = useState<any | null>(null);
+    const [letters, setLetters] = useState<any[]>([]);
     const [err, setErr] = useState<string | null>(null);
 
-    // replace later with real auth
-    const headers = useMemo(() => ({ "x-user-id": "demo_user" }), []);
+    useEffect(() => {
+        if (!authLoading && !token) {
+            router.push("/login");
+        }
+    }, [token, authLoading, router]);
+
+    const headers = useMemo(() => ({
+        "Authorization": `Bearer ${token}`
+    }), [token]);
+
+    if (authLoading || !token) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-[#05060a]">
+                <Activity className="h-8 w-8 animate-spin text-purple-400" />
+            </div>
+        );
+    }
 
     // demo sparkline until you have real history
     const spark = useMemo(
@@ -223,13 +244,48 @@ export default function AppDashboard() {
         throw new Error("Timed out waiting for job");
     }
 
-    async function fetchResult(reportId: string) {
-        const r = await fetch(`${API_BASE}/reports/${reportId}/result`, { headers });
-        const data: ResultResp = await r.json();
-        if (!data.ok) throw new Error("No result yet");
-        return data.result.result_json;
+    async function fetchResult(rid: string) {
+        try {
+            const r = await fetch(`${API_BASE}/reports/${rid}/result`, { headers });
+            const d = await r.json();
+            if (d.ok) setResult(d.result.result_json);
+        } catch (e) {
+            console.error("fetchResult error", e);
+        }
     }
 
+    async function fetchLetters(rid: string) {
+        try {
+            const r = await fetch(`${API_BASE}/reports/${rid}/letters`, { headers });
+            const d = await r.json();
+            if (d.ok) setLetters(d.letters);
+        } catch (e) {
+            console.error("fetchLetters error", e);
+        }
+    }
+
+    async function downloadLetter(fileKey: string, bureau: string) {
+        try {
+            const r = await fetch(`${API_BASE}/downloads/presign`, {
+                method: "POST",
+                headers: { ...headers, "Content-Type": "application/json" },
+                body: JSON.stringify({ file_key: fileKey }),
+            });
+            const d = await r.json();
+            if (!d.ok) throw new Error(d.error);
+            window.open(d.url, "_blank");
+        } catch (e: any) {
+            alert("Download failed: " + e.message);
+        }
+    }
+
+    // Auto-refresh when complete
+    useEffect(() => {
+        if (status === "Complete" && reportId) {
+            fetchResult(reportId);
+            fetchLetters(reportId);
+        }
+    }, [status, reportId]);
     async function runUploadFlow() {
         if (!file || busy) return;
         setBusy(true);
@@ -237,6 +293,7 @@ export default function AppDashboard() {
         setResult(null);
         setJobId(null);
         setReportId(null);
+        setLetters([]); // Clear letters on new upload
 
         try {
             setStatus("Presigning");
@@ -256,11 +313,39 @@ export default function AppDashboard() {
             setStatus("Queued");
             await pollJob(cr.job.id);
 
-            const res = await fetchResult(cr.report.id);
-            setResult(res);
+            // fetchResult and fetchLetters are now called by useEffect when status becomes "Complete"
+            // const res = await fetchResult(cr.report.id); // Removed as fetchResult now sets state directly
+            // setResult(res); // Removed as fetchResult now sets state directly
             setStatus("Complete");
         } catch (e: any) {
             setErr(e?.message || "Something went wrong");
+            setStatus("Error");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function runRetryFlow() {
+        if (!reportId || busy) return;
+        setBusy(true);
+        setErr(null);
+        setResult(null);
+        setJobId(null);
+        setLetters([]);
+
+        try {
+            setStatus("Queued");
+            const r = await fetch(`${API_BASE}/reports/${reportId}/retry`, {
+                method: "POST",
+                headers
+            });
+            const d = await r.json();
+            if (!d.ok) throw new Error(d.error);
+
+            await pollJob(d.job.id);
+            setStatus("Complete");
+        } catch (e: any) {
+            setErr(e?.message || "Retry failed");
             setStatus("Error");
         } finally {
             setBusy(false);
@@ -324,6 +409,15 @@ export default function AppDashboard() {
                                 {busy ? "Working…" : "Upload"}
                             </span>
                         </FancyButton>
+
+                        <div className="h-8 w-px bg-white/10 mx-1" />
+
+                        <button
+                            onClick={logout}
+                            className="text-white/40 hover:text-white/80 transition-colors"
+                        >
+                            <span className="text-sm font-medium">Logout</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -514,20 +608,35 @@ export default function AppDashboard() {
                             accent="sunset"
                             footer={
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <span>We’ll store letters so re-downloads are always identical.</span>
-                                    <div className="flex gap-2">
-                                        <FancyButton variant="ghost" disabled>
-                                            Generate
-                                        </FancyButton>
-                                        <FancyButton variant="primary" disabled>
-                                            Download All
-                                        </FancyButton>
-                                    </div>
+                                    <span>Your customized dispute artifacts are generated automatically.</span>
                                 </div>
                             }
                         >
-                            <div className="text-sm text-white/70">
-                                Next build: generate & store letter PDFs per bureau, then enable downloads.
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                {letters.length ? (
+                                    letters.map((l: any) => (
+                                        <div key={l.id} className="group relative overflow-hidden rounded-[24px] border border-white/10 bg-white/5 p-6 transition-all hover:bg-white/10">
+                                            <div className="relative z-10">
+                                                <div className="text-xs font-semibold uppercase tracking-widest text-white/40">{l.bureau}</div>
+                                                <div className="mt-1 text-xl font-bold">PDF Document</div>
+                                                <div className="mt-4 flex items-center gap-3">
+                                                    <button
+                                                        onClick={() => downloadLetter(l.file_key, l.bureau)}
+                                                        className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold transition-colors hover:bg-white/20"
+                                                    >
+                                                        <FileText className="h-4 w-4" />
+                                                        Download
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="absolute -right-4 -top-4 h-24 w-24 bg-gradient-to-br from-white/10 to-transparent blur-2xl transition-opacity group-hover:opacity-100 opacity-20" />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="col-span-3 py-8 text-center text-white/30 italic">
+                                        {status === "Complete" ? "No letters were generated for this report." : "Letters will appear here once analysis is complete."}
+                                    </div>
+                                )}
                             </div>
                         </GlassCard>
                     </div>

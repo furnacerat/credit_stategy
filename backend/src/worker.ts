@@ -4,6 +4,7 @@ import { r2, R2_BUCKET } from "./r2.js";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { PDFParse } from "pdf-parse";
 import { analyzeCreditText } from "./analyzeCreditText.js";
+import { generateDisputeLetters } from "./generateLetters.js";
 
 async function sleep(ms: number) {
     await new Promise((r) => setTimeout(r, ms));
@@ -25,6 +26,24 @@ async function pdfParse(data: Buffer) {
     const result = await parser.getText();
     await parser.destroy();
     return result;
+}
+
+async function cleanupStaleJobs() {
+    console.log("[WORKER] cleaning up stale jobs...");
+    try {
+        const result = await pool.query(
+            `update jobs 
+             set status='failed', progress='Error', error='job_timeout', updated_at=now() 
+             where (status='queued' or status='processing') 
+             and updated_at < now() - interval '10 minutes'
+             returning id`
+        );
+        if (result.rowCount && result.rowCount > 0) {
+            console.log(`[WORKER] timed out ${result.rowCount} stale jobs:`, result.rows.map(r => r.id));
+        }
+    } catch (e) {
+        console.error("[WORKER] cleanupStaleJobs error", e);
+    }
 }
 
 async function runOnce() {
@@ -84,6 +103,9 @@ async function runOnce() {
             [job.report_id, job.user_id, analysis]
         );
 
+        // 4) Background Letter Generation
+        await generateDisputeLetters(job.report_id, job.user_id, analysis);
+
         await pool.query(`update jobs set status='complete', progress='Complete', updated_at=now() where id=$1`, [job.id]);
     } catch (e: unknown) {
         const msg = (e as Error)?.message ?? "worker_error";
@@ -97,8 +119,15 @@ async function runOnce() {
 
 async function main() {
     console.log("[WORKER] started");
+    let lastCleanup = 0;
     while (true) {
         try {
+            // Cleanup every 5 minutes
+            if (Date.now() - lastCleanup > 5 * 60 * 1000) {
+                await cleanupStaleJobs();
+                lastCleanup = Date.now();
+            }
+
             console.log("[WORKER] checking for queued jobs...");
             await pool.query("begin");
             await runOnce();
