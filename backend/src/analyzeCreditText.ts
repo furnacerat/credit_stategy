@@ -1,127 +1,38 @@
 import { openai } from "./openaiClient.js";
 
 export type CreditAnalysis = {
-    summary: {
-        score_estimate?: number | null;
-        issues_count: number;
-        key_findings: string[];
-    };
-    negatives: Array<{
-        type: "late_payment" | "collections" | "charge_off" | "bankruptcy" | "public_record" | "other";
-        creditor?: string | null;
-        account_last4?: string | null;
-        date?: string | null; // YYYY-MM or YYYY-MM-DD if present
-        notes?: string | null;
-        severity: "low" | "medium" | "high";
+    score_estimate: number;
+    issues_count: number;
+    top_issues: Array<{
+        type: string;
+        severity: string;
+        impact_points: number;
     }>;
-    utilization: {
-        overall_percent?: number | null;
-        revolving_accounts?: Array<{
-            creditor?: string | null;
-            account_last4?: string | null;
-            limit?: number | null;
-            balance?: number | null;
-            utilization_percent?: number | null;
-        }>;
-    };
-    inquiries: Array<{
-        bureau?: "experian" | "equifax" | "transunion" | "unknown";
-        creditor?: string | null;
-        date?: string | null;
-    }>;
-    dispute_letters: Array<{
-        letter_type: "late_payment" | "collection" | "charge_off" | "inquiry" | "identity" | "general";
-        recipient: "bureau" | "creditor" | "collector";
-        subject: string;
-        bullet_points: string[];
-    }>;
+    next_best_action: string;
 };
 
 const schema = {
-    name: "credit_report_analysis",
-    schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-            summary: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+        score_estimate: { type: "integer" },
+        issues_count: { type: "integer" },
+        top_issues: {
+            type: "array",
+            items: {
                 type: "object",
                 additionalProperties: false,
                 properties: {
-                    score_estimate: { type: ["number", "null"] },
-                    issues_count: { type: "number" },
-                    key_findings: { type: "array", items: { type: "string" } }
+                    type: { type: "string" },
+                    severity: { type: "string" },
+                    impact_points: { type: "integer" }
                 },
-                required: ["issues_count", "key_findings"]
-            },
-            negatives: {
-                type: "array",
-                items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                        type: { type: "string", enum: ["late_payment", "collections", "charge_off", "bankruptcy", "public_record", "other"] },
-                        creditor: { type: ["string", "null"] },
-                        account_last4: { type: ["string", "null"] },
-                        date: { type: ["string", "null"] },
-                        notes: { type: ["string", "null"] },
-                        severity: { type: "string", enum: ["low", "medium", "high"] }
-                    },
-                    required: ["type", "severity"]
-                }
-            },
-            utilization: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                    overall_percent: { type: ["number", "null"] },
-                    revolving_accounts: {
-                        type: ["array", "null"],
-                        items: {
-                            type: "object",
-                            additionalProperties: false,
-                            properties: {
-                                creditor: { type: ["string", "null"] },
-                                account_last4: { type: ["string", "null"] },
-                                limit: { type: ["number", "null"] },
-                                balance: { type: ["number", "null"] },
-                                utilization_percent: { type: ["number", "null"] }
-                            }
-                        }
-                    }
-                },
-                required: []
-            },
-            inquiries: {
-                type: "array",
-                items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                        bureau: { type: "string", enum: ["experian", "equifax", "transunion", "unknown"] },
-                        creditor: { type: ["string", "null"] },
-                        date: { type: ["string", "null"] }
-                    },
-                    required: ["bureau"]
-                }
-            },
-            dispute_letters: {
-                type: "array",
-                items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                        letter_type: { type: "string", enum: ["late_payment", "collection", "charge_off", "inquiry", "identity", "general"] },
-                        recipient: { type: "string", enum: ["bureau", "creditor", "collector"] },
-                        subject: { type: "string" },
-                        bullet_points: { type: "array", items: { type: "string" } }
-                    },
-                    required: ["letter_type", "recipient", "subject", "bullet_points"]
-                }
+                required: ["type", "severity", "impact_points"]
             }
         },
-        required: ["summary", "negatives", "utilization", "inquiries", "dispute_letters"]
+        next_best_action: { type: "string" }
     },
-    strict: true
+    required: ["score_estimate", "issues_count", "top_issues", "next_best_action"]
 } as const;
 
 export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis> {
@@ -147,7 +58,12 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
         model,
         input,
         text: {
-            format: { type: "json_schema", json_schema: schema },
+            format: {
+                type: "json_schema",
+                name: "credit_report_analysis",
+                strict: true,
+                schema: schema,
+            }
         },
     });
 
