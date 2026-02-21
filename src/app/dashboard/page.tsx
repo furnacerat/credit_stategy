@@ -239,9 +239,12 @@ export default function AppDashboard() {
         []
     );
 
-    const score = result?.summary?.score_estimate ?? result?.score_estimate ?? null;
+    const score = result?.summary?.score ?? result?.score_estimate ?? null;
+    const rating = result?.summary?.rating ?? null;
+    const primaryIssues = result?.summary?.primary_issues ?? [];
     const issues = result?.summary?.issues_count ?? result?.issues_count ?? null;
-    const nextAction = result?.summary?.key_findings?.[0] ?? result?.next_best_action ?? "Upload a report to get your next step.";
+    const actionPlan = result?.action_plan ?? null;
+    const nextAction = actionPlan?.title ?? result?.next_best_action ?? "Upload a report to get your next step.";
     const negatives = useMemo(() => {
         const items = result?.negatives ?? result?.top_issues ?? [];
         return [...items].sort((a, b) => (b.priority_scoring?.total_priority || 0) - (a.priority_scoring?.total_priority || 0));
@@ -535,9 +538,24 @@ export default function AppDashboard() {
                                     <div className="text-6xl font-black tracking-tight">
                                         {score ?? "—"}
                                         <span className="ml-2 text-base font-semibold text-white/60">est.</span>
+                                        {rating && (
+                                            <span className={cn(
+                                                "ml-4 text-sm font-bold uppercase tracking-wider px-3 py-1 rounded-full",
+                                                rating === "Exceptional" || rating === "Good" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                                    rating === "Fair" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                                                        "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                            )}>
+                                                {rating}
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className="mt-2 text-sm text-white/70">
-                                        Animated trend preview (swap to real history later).
+                                    <div className="mt-3 flex flex-col gap-1.5">
+                                        {primaryIssues.slice(0, 3).map((issue: string, i: number) => (
+                                            <div key={i} className="flex items-center gap-2 text-sm text-white/60">
+                                                <div className="h-1 w-1 rounded-full bg-white/30" />
+                                                {issue}
+                                            </div>
+                                        ))}
                                     </div>
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         <Pill>Utilization: {util?.overall_percent ?? "—"}%</Pill>
@@ -600,7 +618,20 @@ export default function AppDashboard() {
                                 document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
                             }}
                         >
-                            <div className="text-sm leading-6 text-white/90">{nextAction}</div>
+                            <div className="text-sm font-bold leading-6 text-white">{nextAction}</div>
+                            {actionPlan && (
+                                <div className="mt-2 space-y-1.5 pb-2">
+                                    {actionPlan.steps.map((step: string, i: number) => (
+                                        <div key={i} className="flex items-start gap-2 text-xs text-white/60">
+                                            <div className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-white/40" />
+                                            {step}
+                                        </div>
+                                    ))}
+                                    <div className="mt-3 inline-block rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                                        Impact: {actionPlan.expected_impact}
+                                    </div>
+                                </div>
+                            )}
                             <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-white/40 uppercase tracking-wider">
                                 <span>Take Action</span>
                                 <ChevronRight className="h-3 w-3" />
