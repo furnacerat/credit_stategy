@@ -10,7 +10,7 @@ import {
     ResponsiveContainer,
     Tooltip,
 } from "recharts";
-import { Upload, FileText, Sparkles, AlertTriangle, ShieldCheck, Activity } from "lucide-react";
+import { Upload, FileText, Sparkles, AlertTriangle, ShieldCheck, Activity, X, ChevronRight, ExternalLink } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
 
@@ -66,6 +66,7 @@ function GlassCard({
     children,
     className,
     footer,
+    onClick,
 }: {
     title: string;
     icon?: React.ReactNode;
@@ -73,6 +74,7 @@ function GlassCard({
     children: React.ReactNode;
     className?: string;
     footer?: React.ReactNode;
+    onClick?: () => void;
 }) {
     const accentMap: Record<string, string> = {
         mint: "from-emerald-400/25 via-cyan-400/20 to-fuchsia-400/15",
@@ -84,10 +86,12 @@ function GlassCard({
 
     return (
         <motion.div
-            whileHover={{ y: -2, scale: 1.01 }}
+            whileHover={onClick ? { y: -4, scale: 1.02 } : { y: -2, scale: 1.01 }}
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
+            onClick={onClick}
             className={cn(
                 "relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_8px_30px_rgba(0,0,0,.35)] backdrop-blur-xl",
+                onClick && "cursor-pointer group hover:border-white/20",
                 className
             )}
         >
@@ -99,7 +103,7 @@ function GlassCard({
 
             <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 border border-white/10">
+                    <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 border border-white/10 group-hover:bg-white/20 transition-colors">
                         {icon}
                     </div>
                     <div>
@@ -107,7 +111,11 @@ function GlassCard({
                         <div className="text-xs text-white/60">Live from latest report</div>
                     </div>
                 </div>
-                <div className="h-2 w-2 rounded-full bg-emerald-400/90 shadow-[0_0_16px_rgba(52,211,153,.65)]" />
+                {onClick ? (
+                    <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" />
+                ) : (
+                    <div className="h-2 w-2 rounded-full bg-emerald-400/90 shadow-[0_0_16px_rgba(52,211,153,.65)]" />
+                )}
             </div>
 
             <div className="mt-4">{children}</div>
@@ -121,11 +129,45 @@ function GlassCard({
     );
 }
 
-function Pill({ children }: { children: React.ReactNode }) {
+function Pill({ children, color = "white" }: { children: React.ReactNode, color?: "white" | "rose" | "amber" }) {
+    const colors = {
+        white: "border-white/10 bg-white/5 text-white/80",
+        rose: "border-rose-500/20 bg-rose-500/10 text-rose-400",
+        amber: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+    };
     return (
-        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/80">
+        <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs", colors[color])}>
             {children}
         </span>
+    );
+}
+
+function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                onClick={onClose}
+                className="absolute inset-0 bg-[#05060a]/80 backdrop-blur-md"
+            />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0a0c12] p-6 shadow-2xl"
+            >
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-white">{title}</h2>
+                    <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10 transition-colors">
+                        <X className="h-5 w-5 text-white/60" />
+                    </button>
+                </div>
+                <div className="max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {children}
+                </div>
+            </motion.div>
+        </div>
     );
 }
 
@@ -166,6 +208,8 @@ export default function AppDashboard() {
     const [result, setResult] = useState<any | null>(null);
     const [letters, setLetters] = useState<any[]>([]);
     const [err, setErr] = useState<string | null>(null);
+
+    const [activeModal, setActiveModal] = useState<"utilization" | "negatives" | "inquiries" | null>(null);
 
     useEffect(() => {
         if (!authLoading && !token) {
@@ -441,6 +485,10 @@ export default function AppDashboard() {
                             title="Score Pulse"
                             icon={<Activity className="h-5 w-5 text-white/90" />}
                             accent="ice"
+                            onClick={() => {
+                                // Potentially show a score history modal in the future
+                                document.getElementById("sparkline-chart")?.scrollIntoView({ behavior: "smooth" });
+                            }}
                             footer={
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span>Report</span>
@@ -467,7 +515,7 @@ export default function AppDashboard() {
                                     </div>
                                 </div>
 
-                                <div className="h-28 w-full sm:w-[320px] min-w-[240px]">
+                                <div className="h-28 w-full sm:w-[320px] min-w-[240px]" id="sparkline-chart">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={spark}>
                                             <Tooltip
@@ -505,6 +553,7 @@ export default function AppDashboard() {
                             title="Issues Found"
                             icon={<ShieldCheck className="h-5 w-5 text-white/90" />}
                             accent="mint"
+                            onClick={() => setActiveModal("negatives")}
                         >
                             <div className="text-5xl font-black">{issues ?? "—"}</div>
                             <div className="mt-2 text-sm text-white/70">
@@ -516,17 +565,26 @@ export default function AppDashboard() {
                             title="Next Best Move"
                             icon={<Sparkles className="h-5 w-5 text-white/90" />}
                             accent="sunset"
+                            onClick={() => {
+                                document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
+                            }}
                         >
                             <div className="text-sm leading-6 text-white/90">{nextAction}</div>
-                            <div className="mt-3 text-xs text-white/60">
-                                (This becomes “tap-to-open” action flows on mobile.)
+                            <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-white/40 uppercase tracking-wider">
+                                <span>Take Action</span>
+                                <ChevronRight className="h-3 w-3" />
                             </div>
                         </GlassCard>
                     </div>
 
                     {/* UTILIZATION */}
                     <div className="lg:col-span-4">
-                        <GlassCard title="Utilization" icon={<Activity className="h-5 w-5 text-white/90" />} accent="violet">
+                        <GlassCard
+                            title="Utilization"
+                            icon={<Activity className="h-5 w-5 text-white/90" />}
+                            accent="violet"
+                            onClick={() => setActiveModal("utilization")}
+                        >
                             <div className="flex items-end justify-between">
                                 <div>
                                     <div className="text-4xl font-black">{util?.overall_percent ?? "—"}%</div>
@@ -558,7 +616,12 @@ export default function AppDashboard() {
 
                     {/* NEGATIVES */}
                     <div className="lg:col-span-4">
-                        <GlassCard title="Negative Items" icon={<AlertTriangle className="h-5 w-5 text-white/90" />} accent="amber">
+                        <GlassCard
+                            title="Negative Items"
+                            icon={<AlertTriangle className="h-5 w-5 text-white/90" />}
+                            accent="amber"
+                            onClick={() => setActiveModal("negatives")}
+                        >
                             {Array.isArray(negatives) && negatives.length ? (
                                 <div className="space-y-2">
                                     {negatives.slice(0, 4).map((n: any, idx: number) => (
@@ -581,7 +644,12 @@ export default function AppDashboard() {
 
                     {/* INQUIRIES */}
                     <div className="lg:col-span-4">
-                        <GlassCard title="Inquiries" icon={<FileText className="h-5 w-5 text-white/90" />} accent="ice">
+                        <GlassCard
+                            title="Inquiries"
+                            icon={<FileText className="h-5 w-5 text-white/90" />}
+                            accent="ice"
+                            onClick={() => setActiveModal("inquiries")}
+                        >
                             {Array.isArray(inquiries) && inquiries.length ? (
                                 <div className="space-y-2">
                                     {inquiries.slice(0, 5).map((i: any, idx: number) => (
@@ -601,7 +669,7 @@ export default function AppDashboard() {
                     </div>
 
                     {/* LETTERS */}
-                    <div className="lg:col-span-12">
+                    <div className="lg:col-span-12" id="letters-section">
                         <GlassCard
                             title="Dispute Letters"
                             icon={<Sparkles className="h-5 w-5 text-white/90" />}
@@ -655,6 +723,130 @@ export default function AppDashboard() {
                     </FancyButton>
                 </div>
             </div>
+
+            {/* MODALS */}
+            <Modal
+                isOpen={activeModal === "utilization"}
+                onClose={() => setActiveModal(null)}
+                title="Utilization Analysis"
+            >
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between rounded-3xl bg-white/5 p-6 border border-white/10">
+                        <div>
+                            <div className="text-sm text-white/60 mb-1">Overall Utilization</div>
+                            <div className="text-4xl font-black">{util?.overall_percent ?? "—"}%</div>
+                        </div>
+                        <div className="text-right">
+                            <Pill color={util?.overall_percent > 30 ? "rose" : "amber"}>
+                                {util?.overall_percent > 30 ? "High Impact" : "Fair"}
+                            </Pill>
+                            <div className="mt-2 text-xs text-white/50">Target: 1–9%</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-sm font-bold text-white/80 mb-3 px-1 uppercase tracking-wider">Account Breakdown</h3>
+                        <div className="space-y-3">
+                            {(util?.revolving_accounts || []).map((a: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 p-4 transition-colors hover:bg-white/10">
+                                    <div>
+                                        <div className="font-bold text-white">{a.creditor || "Revolving Account"}</div>
+                                        <div className="text-xs text-white/50">
+                                            Balance: <span className="text-white/80">{a.balance}</span> • Limit: <span className="text-white/80">{a.limit}</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-lg font-black text-white">{a.utilization_percent}%</div>
+                                        <div className="h-1.5 w-24 bg-white/10 rounded-full mt-1 overflow-hidden">
+                                            <div
+                                                className={cn(
+                                                    "h-full rounded-full transition-all",
+                                                    a.utilization_percent > 30 ? "bg-rose-500" : "bg-emerald-500"
+                                                )}
+                                                style={{ width: `${Math.min(a.utilization_percent, 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={activeModal === "negatives"}
+                onClose={() => setActiveModal(null)}
+                title="Negative Impact Items"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-white/60 px-1 italic">The following items are causing the most significant drag on your score.</p>
+                    <div className="space-y-3">
+                        {(negatives || []).map((n: any, idx: number) => (
+                            <div key={idx} className="rounded-2xl bg-white/5 border border-white/10 p-5 group transition-all hover:bg-white/10">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <div className="text-lg font-bold text-white">{n.type}</div>
+                                        <div className="text-sm text-white/60 mt-1">{n.creditor} • {n.date}</div>
+                                    </div>
+                                    <Pill color={n.impact_points > 50 ? "rose" : "amber"}>
+                                        -{n.impact_points} pts
+                                    </Pill>
+                                </div>
+                                <div className="mt-4 flex items-center gap-3">
+                                    <button
+                                        onClick={() => {
+                                            setActiveModal(null);
+                                            document.getElementById("letters-section")?.scrollIntoView({ behavior: "smooth" });
+                                        }}
+                                        className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20 transition-all"
+                                    >
+                                        <ShieldCheck className="h-3 w-3" />
+                                        Dispute Strategy
+                                    </button>
+                                    <button
+                                        className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white/60 hover:text-white hover:bg-white/5 transition-all"
+                                    >
+                                        View Details
+                                        <ExternalLink className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={activeModal === "inquiries"}
+                onClose={() => setActiveModal(null)}
+                title="Credit Inquiries"
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                            <div className="text-2xl font-black text-white">{inquiries?.length || 0}</div>
+                            <div className="text-xs text-white/50 uppercase tracking-widest mt-1">Total inquiries</div>
+                        </div>
+                        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                            <div className="text-2xl font-black text-emerald-400">Low</div>
+                            <div className="text-xs text-white/50 uppercase tracking-widest mt-1">Impact level</div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        {(inquiries || []).map((i: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div>
+                                    <div className="font-bold text-white">{i.creditor}</div>
+                                    <div className="text-xs text-white/50">{i.date}</div>
+                                </div>
+                                <Pill>{i.bureau}</Pill>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }

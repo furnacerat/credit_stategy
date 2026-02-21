@@ -13,7 +13,13 @@ interface Issue {
 interface AnalysisResult {
     score_estimate: number;
     issues_count: number;
-    top_issues: Issue[];
+    negatives?: Array<{
+        type: string;
+        creditor: string;
+        date: string;
+        severity: string;
+        impact_points: number;
+    }>;
     next_best_action: string;
 }
 
@@ -78,7 +84,7 @@ export async function generateDisputeLetters(reportId: string, userId: string, a
             // 1) Draft with AI
             const prompt = `
             You are a professional credit dispute specialist. 
-            Draft a formal dispute letter for ${bureau} based on these findings: ${JSON.stringify(analysis.top_issues)}.
+            Draft a formal dispute letter for ${bureau} based on these findings: ${JSON.stringify(analysis.negatives || [])}.
             
             Include:
             - A professional header (Placeholders for name/address).
