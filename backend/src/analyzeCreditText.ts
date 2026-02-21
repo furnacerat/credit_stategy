@@ -146,7 +146,9 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
     const resp = await (openai as unknown as { responses: any }).responses.create({
         model,
         input,
-        response_format: { type: "json_schema", json_schema: schema },
+        text: {
+            format: { type: "json_schema", json_schema: schema },
+        },
     });
 
     const text = resp.output_text;
