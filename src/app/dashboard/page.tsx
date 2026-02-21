@@ -242,6 +242,8 @@ export default function AppDashboard() {
     const score = result?.summary?.score ?? result?.score_estimate ?? null;
     const rating = result?.summary?.rating ?? null;
     const primaryIssues = result?.summary?.primary_issues ?? [];
+    const scoreKillers = result?.summary?.top_score_killers ?? [];
+    const projectedRange = result?.summary?.projected_score_range ?? null;
     const issues = result?.summary?.issues_count ?? result?.issues_count ?? null;
     const actionPlan = result?.action_plan ?? null;
     const nextAction = actionPlan?.title ?? result?.next_best_action ?? "Upload a report to get your next step.";
@@ -549,14 +551,37 @@ export default function AppDashboard() {
                                             </span>
                                         )}
                                     </div>
-                                    <div className="mt-3 flex flex-col gap-1.5">
-                                        {primaryIssues.slice(0, 3).map((issue: string, i: number) => (
-                                            <div key={i} className="flex items-center gap-2 text-sm text-white/60">
-                                                <div className="h-1 w-1 rounded-full bg-white/30" />
-                                                {issue}
-                                            </div>
-                                        ))}
+                                    <div className="mt-6">
+                                        <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Top 3 Score Killers</div>
+                                        <div className="space-y-4">
+                                            {scoreKillers.map((killer: any, i: number) => (
+                                                <div key={i} className="flex items-center justify-between group">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white/40 group-hover:text-white/80 transition-colors">
+                                                            {i + 1}
+                                                        </div>
+                                                        <span className="text-sm font-medium text-white/70">{killer.label}</span>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-rose-400">{killer.impact}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
+
+                                    {projectedRange && (
+                                        <div className="mt-8 rounded-2xl bg-emerald-400/5 border border-emerald-400/10 p-4 transition-all hover:bg-emerald-400/10">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest">Projected Score</div>
+                                                    <div className="text-2xl font-black text-emerald-400">{projectedRange}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-[10px] font-bold text-emerald-400/60 uppercase tracking-widest italic">If fixed</div>
+                                                    <Sparkles className="inline-block h-4 w-4 text-emerald-400 mt-1" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         <Pill>Utilization: {util?.overall_percent ?? "—"}%</Pill>
                                         <Pill>Issues: {issues ?? "—"}</Pill>

@@ -5,6 +5,11 @@ export type CreditAnalysis = {
         score: number;
         rating: string;
         primary_issues: string[];
+        top_score_killers: Array<{
+            label: string;
+            impact: string; // e.g. "19 instances" or "38%"
+        }>;
+        projected_score_range: string; // e.g. "620–660"
     };
     impact_ranking: Array<{
         issue: string;
@@ -64,9 +69,22 @@ const schema = {
                 primary_issues: {
                     type: "array",
                     items: { type: "string" }
-                }
+                },
+                top_score_killers: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                            label: { type: "string" },
+                            impact: { type: "string" }
+                        },
+                        required: ["label", "impact"]
+                    }
+                },
+                projected_score_range: { type: "string" }
             },
-            required: ["score", "rating", "primary_issues"]
+            required: ["score", "rating", "primary_issues", "top_score_killers", "projected_score_range"]
         },
         impact_ranking: {
             type: "array",
@@ -185,7 +203,11 @@ export async function analyzeCreditText(rawText: string): Promise<CreditAnalysis
                 - recency_score: Higher if the item is recent (e.g., last 6 months=10, 5 years ago=2).
                 - confidence_score: Your level of certainty about the data extraction (0.0 to 1.0).
                 
-                Also provide a high-level 'summary' with a 'rating' (Very Poor, Poor, Fair, Good, Exceptional) and 'primary_issues'.
+                Also provide a high-level 'summary' with:
+                - 'rating' (Very Poor, Poor, Fair, Good, Exceptional)
+                - 'primary_issues': 3-4 bullet points.
+                - 'top_score_killers': Rank the 3 most statistically damaging factors including counts/details (e.g., 'Late Payments' with '19 instances').
+                - 'projected_score_range': Estimate a score range (e.g. '620-660') if all major issues are resolved.
                 Rank the top 2-3 most impactful issues in 'impact_ranking'.
                 Generate a concrete 'action_plan' with high-level 'steps' and an 'expected_impact' (e.g., "+20 to +40 points").
                 
